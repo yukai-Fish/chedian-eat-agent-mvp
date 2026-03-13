@@ -1451,6 +1451,46 @@ textarea {
   animation: fade-up 0.22s var(--ease-out) both;
 }
 
+.state-interrupt {
+  border: 1px solid rgba(173, 129, 64, 0.26);
+  background: linear-gradient(140deg, rgba(255, 251, 242, 0.92), rgba(250, 238, 208, 0.66));
+}
+
+.interrupt-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.interrupt-input-wrap {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.interrupt-input {
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid rgba(188, 149, 83, 0.36);
+  background: rgba(255, 255, 255, 0.72);
+  padding: 0 12px;
+  font-size: 14px;
+  color: #2d2f36;
+  outline: none;
+}
+
+.interrupt-input:focus {
+  border-color: rgba(120, 105, 198, 0.55);
+  box-shadow: 0 0 0 3px rgba(124, 109, 203, 0.12);
+}
+
+.interrupt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .skeleton {
   overflow: hidden;
 }

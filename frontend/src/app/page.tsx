@@ -10,6 +10,7 @@ import {
   fetchRecommendations,
   fetchTodayHotRanking,
   reportRankingClick,
+  resumeRecommendations,
   type HistoryMessage,
   type HotRankingItem,
 } from "@/lib/api";
@@ -42,6 +43,73 @@ const getTrendMeta = (trend: HotRankingItem["trend"], delta: number) => {
 type QuerySignal = {
   label: string;
   value: string;
+};
+
+type WorkflowTraceItem = {
+  ts?: string;
+  step?: string;
+  status?: string;
+  retryable?: string;
+  detail?: string;
+  code?: string;
+  finish_reason?: string;
+};
+
+type WorkflowInterruptState = {
+  eventId: string;
+  needReply: boolean;
+  mode: "direct" | "option";
+  prompt: string;
+  options: string[];
+};
+
+const extractTrace = (raw: unknown): WorkflowTraceItem[] => {
+  const trace = (raw as { _trace?: unknown } | null | undefined)?._trace;
+  if (!Array.isArray(trace)) return [];
+  return trace.filter((item): item is WorkflowTraceItem => typeof item === "object" && item !== null);
+};
+
+const extractInterrupt = (raw: unknown, finishReason?: string | null): WorkflowInterruptState | null => {
+  if (finishReason !== "interrupt") return null;
+
+  const eventData = (raw as { event_data?: unknown } | null | undefined)?.event_data;
+  if (!eventData || typeof eventData !== "object") return null;
+
+  const normalized = eventData as {
+    event_id?: unknown;
+    event_type?: unknown;
+    need_reply?: unknown;
+    value?: {
+      type?: unknown;
+      content?: unknown;
+      option?: unknown;
+    };
+  };
+  if (normalized.event_type !== "interrupt") return null;
+
+  const eventId = String(normalized.event_id || "").trim();
+  if (!eventId) return null;
+
+  const value = normalized.value || {};
+  const mode = value.type === "option" ? "option" : "direct";
+  const prompt = String(value.content || "").trim() || "工作流需要你补充信息后继续。";
+  const rawOptions = Array.isArray(value.option) ? value.option : [];
+  const options = rawOptions
+    .map((item) => {
+      if (typeof item === "string") return item.trim();
+      if (!item || typeof item !== "object") return "";
+      const node = item as { content?: unknown; label?: unknown; value?: unknown };
+      return String(node.content || node.label || node.value || "").trim();
+    })
+    .filter(Boolean);
+
+  return {
+    eventId,
+    needReply: Boolean(normalized.need_reply),
+    mode,
+    prompt,
+    options,
+  };
 };
 
 const signalRule = (query: string): QuerySignal[] => {
@@ -87,6 +155,10 @@ export default function HomePage() {
   const [uid] = useState("demo-user");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorTrace, setErrorTrace] = useState<WorkflowTraceItem[]>([]);
+  const [interruptState, setInterruptState] = useState<WorkflowInterruptState | null>(null);
+  const [resumeInput, setResumeInput] = useState("");
+  const [resumeLoading, setResumeLoading] = useState(false);
   const [rankingOpen, setRankingOpen] = useState(false);
   const [rankingItems, setRankingItems] = useState<HotRankingItem[]>(CAMPUS_HOT_RANKING_FALLBACK);
   const [rankingLoading, setRankingLoading] = useState(false);
@@ -134,6 +206,8 @@ export default function HomePage() {
     try {
       setLoading(true);
       setError(null);
+      setErrorTrace([]);
+      setInterruptState(null);
 
       const res = await fetchRecommendations({
         query: text,
@@ -143,7 +217,21 @@ export default function HomePage() {
       });
 
       if (!res.ok) {
+        const raw = (res.raw as { chat_id?: string } | undefined) || undefined;
+        if (raw?.chat_id) {
+          setChatId(raw.chat_id);
+        }
+
+        const interrupt = extractInterrupt(res.raw, res.finishReason);
+        if (interrupt) {
+          setInterruptState(interrupt);
+          setResumeInput(interrupt.mode === "option" && interrupt.options[0] ? interrupt.options[0] : "");
+          setHistory((prev) => [...prev, { role: "user", content: text }]);
+          return;
+        }
+
         setError(res.error || "暂时没有拿到推荐结果，请稍后再试。");
+        setErrorTrace(extractTrace(res.raw));
         return;
       }
 
@@ -162,8 +250,64 @@ export default function HomePage() {
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "请求失败，请检查网络后重试。");
+      setErrorTrace([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResume = async (eventType: "resume" | "ignore" | "abort") => {
+    if (!interruptState || resumeLoading) return;
+
+    const content = resumeInput.trim();
+    if (eventType === "resume" && interruptState.needReply && !content) {
+      setError("该中断节点需要回复内容后才能继续。");
+      return;
+    }
+
+    try {
+      setResumeLoading(true);
+      setError(null);
+      setErrorTrace([]);
+
+      const res = await resumeRecommendations({
+        eventId: interruptState.eventId,
+        eventType,
+        content,
+      });
+
+      if (!res.ok) {
+        const nextInterrupt = extractInterrupt(res.raw, res.finishReason);
+        if (nextInterrupt) {
+          setInterruptState(nextInterrupt);
+          setResumeInput(nextInterrupt.mode === "option" && nextInterrupt.options[0] ? nextInterrupt.options[0] : "");
+          return;
+        }
+        setError(res.error || "恢复工作流失败，请稍后重试。");
+        setErrorTrace(extractTrace(res.raw));
+        return;
+      }
+
+      const nextAnswer = (res.answer || "").trim();
+      setAnswer(nextAnswer);
+      setCurrentBatchIndex(0);
+      setInterruptState(null);
+      setResumeInput("");
+      setHistory((prev) => {
+        const resumeLabel =
+          eventType === "resume" ? content || "[继续]" : eventType === "ignore" ? "[忽略并继续]" : "[终止]";
+        return [...prev, { role: "user", content: resumeLabel }, { role: "assistant", content: nextAnswer }];
+      });
+
+      const raw = (res.raw as { chat_id?: string } | undefined) || undefined;
+      if (raw?.chat_id) {
+        setChatId(raw.chat_id);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "恢复工作流失败，请检查网络后重试。");
+      setErrorTrace([]);
+    } finally {
+      setResumeLoading(false);
     }
   };
 
@@ -410,6 +554,64 @@ export default function HomePage() {
           <section className="state-card state-error">
             <h3>出错了</h3>
             <p>{error}</p>
+            {errorTrace.length > 0 && (
+              <details className="raw-answer">
+                <summary>查看后端追踪（_trace）</summary>
+                <pre>{JSON.stringify(errorTrace, null, 2)}</pre>
+              </details>
+            )}
+          </section>
+        )}
+
+        {interruptState && (
+          <section className="state-card state-interrupt">
+            <h3>需要补充信息</h3>
+            <p>{interruptState.prompt}</p>
+            {interruptState.options.length > 0 && (
+              <div className="interrupt-options">
+                {interruptState.options.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    className={`chip-btn ${resumeInput === item ? "is-active" : ""}`}
+                    onClick={() => setResumeInput(item)}
+                    disabled={resumeLoading}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="interrupt-input-wrap">
+              <input
+                className="interrupt-input"
+                placeholder={interruptState.needReply ? "请输入补充信息后继续" : "可选填写补充信息"}
+                value={resumeInput}
+                onChange={(e) => setResumeInput(e.target.value)}
+                disabled={resumeLoading}
+              />
+              <div className="interrupt-actions">
+                <button type="button" className="send-btn" onClick={() => void handleResume("resume")} disabled={resumeLoading}>
+                  {resumeLoading ? "处理中..." : "继续"}
+                </button>
+                <button
+                  type="button"
+                  className="feedback-entry-btn"
+                  onClick={() => void handleResume("ignore")}
+                  disabled={resumeLoading}
+                >
+                  忽略
+                </button>
+                <button
+                  type="button"
+                  className="feedback-entry-btn"
+                  onClick={() => void handleResume("abort")}
+                  disabled={resumeLoading}
+                >
+                  终止
+                </button>
+              </div>
+            </div>
           </section>
         )}
 
