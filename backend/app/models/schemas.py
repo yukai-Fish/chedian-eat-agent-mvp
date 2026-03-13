@@ -1,10 +1,10 @@
-﻿from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
 
 class RecommendRequest(BaseModel):
-    query: str = Field(..., min_length=1, description="自然语言查询")
+    query: str = Field(..., min_length=1, description="natural language query")
     top_k: int = Field(default=3, ge=1, le=10)
 
 
@@ -33,14 +33,16 @@ class RecommendResponse(BaseModel):
 
 
 class HistoryMessage(BaseModel):
-    role: str
+    role: Literal["user", "assistant"]
+    contentType: Literal["text", "image"] = "text"
     content: str
 
 
 class WorkflowRecommendRequest(BaseModel):
-    query: str = Field(..., min_length=1, description="用户输入")
+    query: str = Field(..., min_length=1, description="user query")
     uid: Optional[str] = None
     chatId: Optional[str] = None
+    stream: Optional[bool] = None
     history: List[HistoryMessage] = Field(default_factory=list)
 
 
@@ -51,6 +53,21 @@ class WorkflowRecommendResponse(BaseModel):
     error: Optional[str] = None
     code: Optional[int] = None
     finishReason: Optional[str] = None
+
+
+class WorkflowResumeRequest(BaseModel):
+    eventId: str = Field(..., min_length=1)
+    eventType: Literal["resume", "ignore", "abort"] = "resume"
+    content: Optional[str] = None
+    stream: Optional[bool] = None
+
+
+class WorkflowUploadFileResponse(BaseModel):
+    ok: bool
+    url: Optional[str] = None
+    raw: Optional[Any] = None
+    error: Optional[str] = None
+    code: Optional[int] = None
 
 
 class HotRankingItem(BaseModel):

@@ -1,5 +1,6 @@
 export type HistoryMessage = {
   role: "user" | "assistant";
+  contentType?: "text" | "image";
   content: string;
 };
 
@@ -7,6 +8,7 @@ export type RecommendProxyRequest = {
   query: string;
   uid?: string;
   chatId?: string;
+  stream?: boolean;
   history?: HistoryMessage[];
 };
 
@@ -17,6 +19,21 @@ export type RecommendProxyResponse = {
   error?: string | null;
   code?: number | null;
   finishReason?: string | null;
+};
+
+export type WorkflowResumeRequest = {
+  eventId: string;
+  eventType?: "resume" | "ignore" | "abort";
+  content?: string;
+  stream?: boolean;
+};
+
+export type WorkflowUploadFileResponse = {
+  ok: boolean;
+  url?: string | null;
+  raw?: unknown;
+  error?: string | null;
+  code?: number | null;
 };
 
 export type HotRankingItem = {
@@ -115,6 +132,36 @@ export async function fetchTodayHotRanking(): Promise<HotRankingItem[]> {
 
   const data = (await res.json()) as HotRankingResponse;
   return data.items || [];
+}
+
+export async function resumeRecommendations(payload: WorkflowResumeRequest): Promise<RecommendProxyResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/recommend/resume`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Resume request failed: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function uploadWorkflowFile(file: File): Promise<WorkflowUploadFileResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${API_BASE_URL}/api/workflow/upload-file`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Upload request failed: ${res.status}`);
+  }
+
+  return res.json();
 }
 
 export async function reportRankingClick(payload: RankingClickPayload): Promise<void> {

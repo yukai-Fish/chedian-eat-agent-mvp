@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from app.models.schemas import (
     FeedbackRequest,
@@ -6,10 +6,12 @@ from app.models.schemas import (
     StoreNameSuggestionsResponse,
     WorkflowRecommendRequest,
     WorkflowRecommendResponse,
+    WorkflowResumeRequest,
+    WorkflowUploadFileResponse,
 )
 from app.services.feedback_repository import save_feedback, suggest_store_names
 from app.services.usage_events import log_query_event
-from app.services.xfyun_workflow_service import ask_workflow
+from app.services.xfyun_workflow_service import ask_workflow, resume_workflow, upload_workflow_file
 
 
 proxy_router = APIRouter()
@@ -22,9 +24,34 @@ def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendRe
         query=req.query,
         uid=req.uid,
         chat_id=req.chatId,
+        stream=req.stream,
         history=[item.model_dump() for item in req.history],
     )
     return WorkflowRecommendResponse(**workflow_result)
+
+
+@proxy_router.post("/recommend/resume", response_model=WorkflowRecommendResponse)
+def resume_workflow_proxy(req: WorkflowResumeRequest) -> WorkflowRecommendResponse:
+    workflow_result = resume_workflow(
+        event_id=req.eventId,
+        event_type=req.eventType,
+        content=req.content,
+        stream=req.stream,
+    )
+    return WorkflowRecommendResponse(**workflow_result)
+
+
+@proxy_router.post("/workflow/upload-file", response_model=WorkflowUploadFileResponse)
+async def upload_workflow_file_proxy(file: UploadFile = File(...)) -> WorkflowUploadFileResponse:
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="file is empty.")
+    result = upload_workflow_file(
+        file_name=file.filename or "upload.bin",
+        content=content,
+        content_type=file.content_type or "application/octet-stream",
+    )
+    return WorkflowUploadFileResponse(**result)
 
 
 @proxy_router.get("/stores/suggest", response_model=StoreNameSuggestionsResponse)
@@ -38,9 +65,9 @@ def store_name_suggestions_proxy(keyword: str = "") -> StoreNameSuggestionsRespo
 def submit_feedback_proxy(req: FeedbackRequest) -> FeedbackResponse:
     if req.feedbackType == "dining_feedback":
         if req.rating is None:
-            raise HTTPException(status_code=400, detail="吃后反馈需要评分（1-5）。")
+            raise HTTPException(status_code=400, detail="rating is required for dining feedback.")
         if not (req.comment or "").strip():
-            raise HTTPException(status_code=400, detail="吃后反馈需要填写评论内容。")
+            raise HTTPException(status_code=400, detail="comment is required for dining feedback.")
 
     feedback_id = save_feedback(
         {
@@ -61,4 +88,4 @@ def submit_feedback_proxy(req: FeedbackRequest) -> FeedbackResponse:
             "source": (req.source or "frontend_user_feedback").strip() or "frontend_user_feedback",
         }
     )
-    return FeedbackResponse(ok=True, id=feedback_id, message="反馈提交成功，感谢你共建成电美食地图。")
+    return FeedbackResponse(ok=True, id=feedback_id, message="feedback submitted successfully.")
