@@ -240,7 +240,9 @@ def _send_json_request(
     for attempt in range(max_retries + 1):
         try:
             with httpx.Client(timeout=timeout_seconds, trust_env=False, http2=False) as client:
-                resp = client.post(endpoint, headers=headers, json=payload)
+                # Use explicit UTF-8 JSON body to avoid any client/runtime locale side effects.
+                body = json.dumps(payload, ensure_ascii=True)
+                resp = client.post(endpoint, headers=headers, content=body.encode("utf-8"))
             timeout_error = None
             request_error = None
             break
@@ -348,7 +350,7 @@ def ask_workflow(
 
     headers = {
         "Authorization": auth_header,
-        "Content-Type": "application/json",
+        "Content-Type": "application/json; charset=utf-8",
     }
     payload = _build_chat_payload(
         query=query,
@@ -403,7 +405,7 @@ def resume_workflow(
 
     headers = {
         "Authorization": auth_header,
-        "Content-Type": "application/json",
+        "Content-Type": "application/json; charset=utf-8",
     }
     payload: Dict[str, Any] = {
         "event_id": event_id,
