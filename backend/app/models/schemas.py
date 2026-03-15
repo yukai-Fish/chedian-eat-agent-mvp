@@ -43,6 +43,7 @@ class WorkflowRecommendRequest(BaseModel):
     uid: Optional[str] = None
     chatId: Optional[str] = None
     stream: Optional[bool] = None
+    parameters: Optional[dict] = None
     history: List[HistoryMessage] = Field(default_factory=list)
 
 

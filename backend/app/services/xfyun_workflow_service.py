@@ -90,13 +90,20 @@ def _build_chat_payload(
     chat_id: Optional[str],
     mapped_history: List[Dict[str, Any]],
     stream: bool,
+    extra_parameters: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    merged_parameters: Dict[str, Any] = {}
+    if isinstance(extra_parameters, dict):
+        merged_parameters.update(extra_parameters)
+
+    # Keep contract key, and also provide common alias for workflows that directly bind `query`.
+    merged_parameters["AGENT_USER_INPUT"] = query
+    merged_parameters.setdefault("query", query)
+
     payload: Dict[str, Any] = {
         "flow_id": os.getenv("XFYUN_FLOW_ID", "7436739079683477504"),
         "uid": uid or "demo-user",
-        "parameters": {
-            "AGENT_USER_INPUT": query,
-        },
+        "parameters": merged_parameters,
         "ext": {
             "bot_id": "workflow",
             "caller": "workflow",
@@ -319,6 +326,7 @@ def ask_workflow(
     chat_id: Optional[str] = None,
     history: Optional[List[Dict[str, Any]]] = None,
     stream: Optional[bool] = None,
+    parameters: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     app_id = os.getenv("XFYUN_APP_ID", "").strip()
     if not app_id:
@@ -348,6 +356,7 @@ def ask_workflow(
         chat_id=chat_id,
         mapped_history=mapped_history or [],
         stream=stream_enabled,
+        extra_parameters=parameters,
     )
 
     resp, error, code, _ = _send_json_request(endpoint, headers, payload, timeout_seconds, max_retries)

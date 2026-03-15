@@ -25,6 +25,7 @@ def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendRe
         uid=req.uid,
         chat_id=req.chatId,
         stream=req.stream,
+        parameters=req.parameters,
         history=[item.model_dump() for item in req.history],
     )
     return WorkflowRecommendResponse(**workflow_result)

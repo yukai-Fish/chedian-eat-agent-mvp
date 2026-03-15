@@ -9,6 +9,7 @@ export type RecommendProxyRequest = {
   uid?: string;
   chatId?: string;
   stream?: boolean;
+  parameters?: Record<string, unknown>;
   history?: HistoryMessage[];
 };
 
