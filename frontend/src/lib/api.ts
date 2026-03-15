@@ -111,7 +111,7 @@ const API_BASE_URL = resolveApiBaseUrl();
 export async function fetchRecommendations(payload: RecommendProxyRequest): Promise<RecommendProxyResponse> {
   const res = await fetch(`${API_BASE_URL}/api/recommend`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json; charset=utf-8" },
     body: JSON.stringify(payload),
   });
 
@@ -138,7 +138,7 @@ export async function fetchTodayHotRanking(): Promise<HotRankingItem[]> {
 export async function resumeRecommendations(payload: WorkflowResumeRequest): Promise<RecommendProxyResponse> {
   const res = await fetch(`${API_BASE_URL}/api/recommend/resume`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json; charset=utf-8" },
     body: JSON.stringify(payload),
   });
 
@@ -169,7 +169,7 @@ export async function reportRankingClick(payload: RankingClickPayload): Promise<
   try {
     await fetch(`${API_BASE_URL}/api/v1/events/ranking-click`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json; charset=utf-8" },
       body: JSON.stringify({
         shop_id: payload.shopId,
         shop_name: payload.shopName,
@@ -184,7 +184,7 @@ export async function reportRankingClick(payload: RankingClickPayload): Promise<
 export async function submitFeedback(payload: FeedbackPayload): Promise<FeedbackResponse> {
   const res = await fetch(`${API_BASE_URL}/api/feedback`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json; charset=utf-8" },
     body: JSON.stringify(payload),
   });
 

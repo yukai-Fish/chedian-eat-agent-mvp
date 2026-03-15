@@ -1,4 +1,3 @@
-import json
 import os
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -240,9 +239,8 @@ def _send_json_request(
     for attempt in range(max_retries + 1):
         try:
             with httpx.Client(timeout=timeout_seconds, trust_env=False, http2=False) as client:
-                # Use explicit UTF-8 JSON body to avoid any client/runtime locale side effects.
-                body = json.dumps(payload, ensure_ascii=True)
-                resp = client.post(endpoint, headers=headers, content=body.encode("utf-8"))
+                # Send native JSON so Unicode text is preserved as-is.
+                resp = client.post(endpoint, headers=headers, json=payload)
             timeout_error = None
             request_error = None
             break
