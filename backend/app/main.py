@@ -46,3 +46,15 @@ app.add_middleware(
 app.add_middleware(Utf8ResponseMiddleware)
 app.include_router(router, prefix='/api/v1', tags=['mvp'])
 app.include_router(proxy_router, prefix='/api', tags=['workflow-proxy'])
+
+
+@app.on_event("startup")
+async def _print_runtime_provider() -> None:
+    provider = os.getenv("RECOMMEND_PROVIDER", "workflow").strip().lower()
+    spark_model = os.getenv("XFYUN_SPARKX_MODEL", "").strip()
+    spark_x2 = os.getenv("XFYUN_SPARKX2_ENDPOINT", "").strip()
+    has_spark_password = bool(os.getenv("XFYUN_SPARKX_API_PASSWORD", "").strip())
+    print(
+        "[startup] recommend_provider=%s spark_model=%s spark_x2_endpoint=%s spark_password_set=%s"
+        % (provider, spark_model or "-", spark_x2 or "-", "yes" if has_spark_password else "no")
+    )
