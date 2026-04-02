@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS usage_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   event_type TEXT NOT NULL, -- query | ranking_click
   uid TEXT,
+  anonymous_id TEXT,
+  user_id TEXT,
   query_text TEXT,
   shop_id TEXT,
   shop_name TEXT,
@@ -43,6 +45,8 @@ CREATE TABLE IF NOT EXISTS feedback_submissions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   feedback_type TEXT NOT NULL, -- new_store | dining_feedback
   store_name TEXT NOT NULL,
+  anonymous_id TEXT,
+  user_id TEXT,
   area TEXT,
   category TEXT,
   avg_price INTEGER,
@@ -64,3 +68,17 @@ CREATE INDEX IF NOT EXISTS idx_feedback_type_time
 
 CREATE INDEX IF NOT EXISTS idx_feedback_store_time
   ON feedback_submissions(store_name, created_at);
+
+CREATE TABLE IF NOT EXISTS user_favorites (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  anonymous_id TEXT,
+  shop_id TEXT NOT NULL,
+  shop_name TEXT,
+  source TEXT DEFAULT 'web',
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id, shop_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_favorites_user_time
+  ON user_favorites(user_id, created_at);

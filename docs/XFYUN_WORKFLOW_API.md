@@ -3,6 +3,9 @@
 This document is the source of truth for this repository's XFYUN workflow integration.
 All future frontend/backend changes must remain compatible with this contract.
 
+Companion runtime/context notes:
+- `docs/XFYUN_WORKFLOW_CURRENT_CONTEXT.md` (current workflow snapshot, topology, and diagnostics)
+
 ## 1) Chat Workflow Endpoint
 
 - Method: `POST`
@@ -272,3 +275,117 @@ Update AGENTS.md (or equivalent repo instruction file) with a short but clear ru
 - Respect AGENT_USER_INPUT, response parsing, interrupt/resume handling, and error semantics
 - Do not invent incompatible request/response assumptions
 ```
+
+---
+
+## Appendix B: Spark X Deep Reasoning HTTP API Contract (Updated: 2026-02-09)
+
+This section is a required contract when this repo runs in `spark_local` recommendation mode.
+
+### B.1 Endpoint and Model Mapping
+
+- X2 endpoint: `https://spark-api-open.xf-yun.com/x2/chat/completions`
+- X1.5 endpoint: `https://spark-api-open.xf-yun.com/v2/chat/completions`
+- For both endpoints, current model value must be:
+  - `model = "spark-x"`
+
+OpenAI SDK compatible base URLs:
+- X2: `https://spark-api-open.xf-yun.com/x2/`
+- X1.5: `https://spark-api-open.xf-yun.com/v2/`
+
+### B.2 Authentication
+
+- Header:
+  - `Authorization: Bearer {APIpassword}`
+  - `Content-Type: application/json`
+- `APIpassword` is from Spark HTTP service console.
+- Compatibility note: `Bearer {APIKey}:{APISecret}` may also work in some environments, but project standard for Spark HTTP is `APIpassword`.
+
+### B.3 Request Body (Non-stream/Stream)
+
+Required:
+- `model` (`spark-x`)
+- `messages` (array)
+
+Common optional:
+- `user`
+- `stream`
+- `temperature`
+- `top_p`
+- `top_k`
+- `presence_penalty`
+- `frequency_penalty`
+- `max_tokens`
+- `tools`
+- `tool_choice`
+- `thinking` (`enabled | disabled | auto`)
+
+Reference request:
+
+```json
+{
+  "model": "spark-x",
+  "user": "user_id",
+  "messages": [
+    {
+      "role": "user",
+      "content": "推荐两个国内适合自驾的景点"
+    }
+  ],
+  "stream": true,
+  "thinking": { "type": "enabled" }
+}
+```
+
+### B.4 Response Contract
+
+Top-level fields:
+- `code` (0 means success)
+- `message`
+- `sid` (request trace id)
+- `choices`
+- `usage` (usually final)
+
+Non-stream content path:
+- `choices[0].message.content`
+- Reasoning model may also include:
+  - `choices[0].message.reasoning_content`
+
+Stream content path (SSE):
+- `choices[0].delta.content`
+- Reasoning stream:
+  - `choices[0].delta.reasoning_content`
+
+### B.5 FunctionCall / Tools
+
+When function call is enabled, model may return:
+- `choices[0].message.tool_calls[]`
+  - `id`
+  - `type = "function"`
+  - `function.name`
+  - `function.arguments`
+
+Streaming tool-calls may arrive in `choices[0].delta.tool_calls[]` chunks.
+
+### B.6 Error Codes to Preserve
+
+- `0`: success
+- `10007`: request overlap (must wait previous completion)
+- `10013`: input moderation blocked
+- `10014`: output moderation blocked
+- `10019`: risky/violation tendency
+- `10907`: token over limit
+- `11200`: no auth or quota exceeded
+- `11201`: daily limit exceeded
+- `11202`: QPS/second-level limit exceeded
+- `11203`: concurrency limit exceeded
+
+### B.7 Project Integration Rules (Spark Mode Required)
+
+When `RECOMMEND_PROVIDER=spark_local`:
+- Use Spark endpoint + `model="spark-x"` as mandatory contract.
+- Preserve `sid` in backend response `raw.sid` for troubleshooting.
+- Parse model output defensively (`choices[0].message.content` first, fallback to delta when needed).
+- If model outputs fenced JSON, strip fences before frontend parsing.
+- Keep UTF-8 end-to-end; Chinese input/output corruption (`???`, mojibake) is a blocker.
+- Keep workflow and spark contracts separated; do not mix field assumptions across APIs.

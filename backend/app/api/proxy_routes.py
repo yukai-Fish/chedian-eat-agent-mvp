@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from app.models.schemas import (
@@ -10,6 +12,7 @@ from app.models.schemas import (
     WorkflowUploadFileResponse,
 )
 from app.services.feedback_repository import save_feedback, suggest_store_names
+from app.services.spark_local_recommend_service import ask_spark_local_recommend
 from app.services.usage_events import log_query_event
 from app.services.xfyun_workflow_service import ask_workflow, resume_workflow, upload_workflow_file
 
@@ -19,16 +22,33 @@ proxy_router = APIRouter()
 
 @proxy_router.post("/recommend", response_model=WorkflowRecommendResponse)
 def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendResponse:
-    log_query_event(req.query, uid=req.uid, source="workflow-recommend")
-    workflow_result = ask_workflow(
-        query=req.query,
-        uid=req.uid,
-        chat_id=req.chatId,
-        stream=req.stream,
-        parameters=req.parameters,
-        history=[item.model_dump() for item in req.history],
+    resolved_uid = req.uid or req.userId or req.anonymousId
+    provider = os.getenv("RECOMMEND_PROVIDER", "workflow").strip().lower()
+
+    log_query_event(
+        req.query,
+        uid=resolved_uid,
+        anonymous_id=req.anonymousId,
+        user_id=req.userId,
+        source=f"{provider}-recommend",
     )
-    return WorkflowRecommendResponse(**workflow_result)
+
+    if provider == "workflow":
+        result = ask_workflow(
+            query=req.query,
+            uid=resolved_uid,
+            chat_id=req.chatId,
+            stream=req.stream,
+            parameters=req.parameters,
+            history=[item.model_dump() for item in req.history],
+        )
+        return WorkflowRecommendResponse(**result)
+
+    result = ask_spark_local_recommend(
+        query=req.query,
+        uid=resolved_uid,
+    )
+    return WorkflowRecommendResponse(**result)
 
 
 @proxy_router.post("/recommend/resume", response_model=WorkflowRecommendResponse)
@@ -74,6 +94,8 @@ def submit_feedback_proxy(req: FeedbackRequest) -> FeedbackResponse:
         {
             "feedback_type": req.feedbackType,
             "store_name": req.storeName.strip(),
+            "anonymous_id": (req.anonymousId or "").strip() or None,
+            "user_id": (req.userId or "").strip() or None,
             "area": (req.area or "").strip() or None,
             "category": (req.category or "").strip() or None,
             "avg_price": req.avgPrice,

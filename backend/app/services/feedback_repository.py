@@ -20,6 +20,8 @@ def save_feedback(record: Dict[str, object]) -> int:
             INSERT INTO feedback_submissions (
                 feedback_type,
                 store_name,
+                anonymous_id,
+                user_id,
                 area,
                 category,
                 avg_price,
@@ -33,11 +35,13 @@ def save_feedback(record: Dict[str, object]) -> int:
                 comment,
                 warning_note,
                 source
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record.get("feedback_type"),
                 record.get("store_name"),
+                record.get("anonymous_id"),
+                record.get("user_id"),
                 record.get("area"),
                 record.get("category"),
                 record.get("avg_price"),

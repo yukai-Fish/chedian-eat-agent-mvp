@@ -1,3 +1,5 @@
+import { getCurrentIdentity } from "@/lib/identity";
+
 export type HistoryMessage = {
   role: "user" | "assistant";
   contentType?: "text" | "image";
@@ -7,6 +9,8 @@ export type HistoryMessage = {
 export type RecommendProxyRequest = {
   query: string;
   uid?: string;
+  anonymousId?: string;
+  userId?: string;
   chatId?: string;
   stream?: boolean;
   parameters?: Record<string, unknown>;
@@ -60,6 +64,8 @@ export type HotRankingResponse = {
 export type RankingClickPayload = {
   shopId: string;
   shopName?: string;
+  anonymousId?: string;
+  userId?: string;
   uid?: string;
 };
 
@@ -68,6 +74,8 @@ export type FeedbackType = "new_store" | "dining_feedback";
 export type FeedbackPayload = {
   feedbackType: FeedbackType;
   storeName: string;
+  anonymousId?: string;
+  userId?: string;
   area?: string;
   category?: string;
   avgPrice?: number;
@@ -89,6 +97,16 @@ export type FeedbackResponse = {
   message: string;
 };
 
+export type FavoriteItem = {
+  id: number;
+  user_id: string;
+  anonymous_id?: string | null;
+  shop_id: string;
+  shop_name?: string | null;
+  source: string;
+  created_at: string;
+};
+
 const PROD_API_FALLBACK = "https://chedian-eat-agent-mvp.onrender.com";
 
 function resolveApiBaseUrl(): string {
@@ -102,17 +120,43 @@ function resolveApiBaseUrl(): string {
     }
   }
 
-  // Safe production fallback when Netlify env var is missing.
   return PROD_API_FALLBACK;
 }
 
 const API_BASE_URL = resolveApiBaseUrl();
 
+const JSON_UTF8_HEADERS: HeadersInit = {
+  "Content-Type": "application/json; charset=utf-8",
+  Accept: "application/json; charset=utf-8",
+  "Accept-Charset": "utf-8",
+};
+
+function encodeJsonUtf8(payload: unknown): Blob {
+  return new Blob([new TextEncoder().encode(JSON.stringify(payload))], {
+    type: "application/json; charset=utf-8",
+  });
+}
+
+function getIdentityPayload() {
+  const identity = getCurrentIdentity();
+  return {
+    anonymousId: identity.anonymousId,
+    userId: identity.userId ?? undefined,
+    uid: identity.userId || identity.anonymousId,
+  };
+}
+
 export async function fetchRecommendations(payload: RecommendProxyRequest): Promise<RecommendProxyResponse> {
+  const identity = getIdentityPayload();
   const res = await fetch(`${API_BASE_URL}/api/recommend`, {
     method: "POST",
-    headers: { "Content-Type": "application/json; charset=utf-8" },
-    body: JSON.stringify(payload),
+    headers: JSON_UTF8_HEADERS,
+    body: encodeJsonUtf8({
+      ...payload,
+      anonymousId: payload.anonymousId || identity.anonymousId,
+      userId: payload.userId || identity.userId,
+      uid: payload.uid || identity.uid,
+    }),
   });
 
   if (!res.ok) {
@@ -138,8 +182,8 @@ export async function fetchTodayHotRanking(): Promise<HotRankingItem[]> {
 export async function resumeRecommendations(payload: WorkflowResumeRequest): Promise<RecommendProxyResponse> {
   const res = await fetch(`${API_BASE_URL}/api/recommend/resume`, {
     method: "POST",
-    headers: { "Content-Type": "application/json; charset=utf-8" },
-    body: JSON.stringify(payload),
+    headers: JSON_UTF8_HEADERS,
+    body: encodeJsonUtf8(payload),
   });
 
   if (!res.ok) {
@@ -166,26 +210,34 @@ export async function uploadWorkflowFile(file: File): Promise<WorkflowUploadFile
 }
 
 export async function reportRankingClick(payload: RankingClickPayload): Promise<void> {
+  const identity = getIdentityPayload();
   try {
     await fetch(`${API_BASE_URL}/api/v1/events/ranking-click`, {
       method: "POST",
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-      body: JSON.stringify({
+      headers: JSON_UTF8_HEADERS,
+      body: encodeJsonUtf8({
         shop_id: payload.shopId,
         shop_name: payload.shopName,
-        uid: payload.uid,
+        uid: payload.uid || identity.uid,
+        anonymousId: payload.anonymousId || identity.anonymousId,
+        userId: payload.userId || identity.userId,
       }),
     });
   } catch {
-    // Non-blocking analytics event.
+    // non-blocking analytics
   }
 }
 
 export async function submitFeedback(payload: FeedbackPayload): Promise<FeedbackResponse> {
+  const identity = getIdentityPayload();
   const res = await fetch(`${API_BASE_URL}/api/feedback`, {
     method: "POST",
-    headers: { "Content-Type": "application/json; charset=utf-8" },
-    body: JSON.stringify(payload),
+    headers: JSON_UTF8_HEADERS,
+    body: encodeJsonUtf8({
+      ...payload,
+      anonymousId: payload.anonymousId || identity.anonymousId,
+      userId: payload.userId || identity.userId,
+    }),
   });
 
   if (!res.ok) {
@@ -206,3 +258,45 @@ export async function fetchStoreNameSuggestions(keyword: string): Promise<string
   const data = (await res.json()) as { items?: string[] };
   return data.items || [];
 }
+
+export async function addFavorite(payload: { userId: string; shopId: string; shopName?: string; anonymousId?: string }): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/favorites`, {
+    method: "POST",
+    headers: JSON_UTF8_HEADERS,
+    body: encodeJsonUtf8({
+      userId: payload.userId,
+      shopId: payload.shopId,
+      shopName: payload.shopName,
+      anonymousId: payload.anonymousId,
+      source: "web-favorite",
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`收藏失败: ${res.status}`);
+  }
+}
+
+export async function removeFavorite(payload: { userId: string; shopId: string }): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/favorites`, {
+    method: "DELETE",
+    headers: JSON_UTF8_HEADERS,
+    body: encodeJsonUtf8(payload),
+  });
+  if (!res.ok) {
+    throw new Error(`取消收藏失败: ${res.status}`);
+  }
+}
+
+export async function fetchFavorites(userId: string): Promise<FavoriteItem[]> {
+  const uid = userId.trim();
+  if (!uid) return [];
+  const res = await fetch(`${API_BASE_URL}/api/v1/favorites?user_id=${encodeURIComponent(uid)}`, {
+    method: "GET",
+  });
+  if (!res.ok) {
+    throw new Error(`获取收藏失败: ${res.status}`);
+  }
+  const data = (await res.json()) as { items?: FavoriteItem[] };
+  return data.items || [];
+}
+

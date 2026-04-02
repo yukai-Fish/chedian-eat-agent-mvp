@@ -1,3 +1,4 @@
+import json
 import os
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -12,6 +13,19 @@ ERROR_HINTS = {
     20804: "OpenAPI timeout.",
     23900: "Session timeout or chat not found.",
 }
+
+
+def _text_encoding_snapshot(text: str, max_utf8_hex: int = 240) -> Dict[str, Any]:
+    utf8_bytes = text.encode("utf-8")
+    utf8_hex = utf8_bytes.hex()
+    if len(utf8_hex) > max_utf8_hex:
+        utf8_hex = f"{utf8_hex[:max_utf8_hex]}...(truncated)"
+    return {
+        "text": text,
+        "length": len(text),
+        "unicode_escape": text.encode("unicode_escape").decode("ascii"),
+        "utf8_hex": utf8_hex,
+    }
 
 
 def _error_hint_by_code(code: Optional[int]) -> Optional[str]:
@@ -95,9 +109,8 @@ def _build_chat_payload(
     if isinstance(extra_parameters, dict):
         merged_parameters.update(extra_parameters)
 
-    # Keep contract key, and also provide common alias for workflows that directly bind `query`.
+    # Contract key for workflow start node input.
     merged_parameters["AGENT_USER_INPUT"] = query
-    merged_parameters.setdefault("query", query)
 
     payload: Dict[str, Any] = {
         "flow_id": os.getenv("XFYUN_FLOW_ID", "7436739079683477504"),
@@ -239,8 +252,9 @@ def _send_json_request(
     for attempt in range(max_retries + 1):
         try:
             with httpx.Client(timeout=timeout_seconds, trust_env=False, http2=False) as client:
-                # Send native JSON so Unicode text is preserved as-is.
-                resp = client.post(endpoint, headers=headers, json=payload)
+                # Force UTF-8 JSON bytes with native Chinese characters.
+                body = json.dumps(payload, ensure_ascii=False)
+                resp = client.post(endpoint, headers=headers, content=body.encode("utf-8"))
             timeout_error = None
             request_error = None
             break
@@ -328,17 +342,20 @@ def ask_workflow(
     stream: Optional[bool] = None,
     parameters: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    trace: List[Dict[str, Any]] = []
+    trace.append({"stage": "input_received", "query": _text_encoding_snapshot(query)})
+
     app_id = os.getenv("XFYUN_APP_ID", "").strip()
     if not app_id:
-        return {"ok": False, "error": "XFYUN_APP_ID is missing.", "code": None, "raw": None}
+        return {"ok": False, "error": "XFYUN_APP_ID is missing.", "code": None, "raw": {"_trace": trace}}
 
     auth_header, auth_err = _build_authorization()
     if auth_err:
-        return {"ok": False, "error": auth_err, "code": None, "raw": None}
+        return {"ok": False, "error": auth_err, "code": None, "raw": {"_trace": trace}}
 
     mapped_history, history_err = validate_and_map_history(history or [])
     if history_err:
-        return {"ok": False, "error": history_err, "code": None, "raw": {"history": history}}
+        return {"ok": False, "error": history_err, "code": None, "raw": {"history": history, "_trace": trace}}
 
     base_url = os.getenv("XFYUN_BASE_URL", "https://xingchen-api.xf-yun.com").rstrip("/")
     endpoint = f"{base_url}/workflow/v1/chat/completions"
@@ -349,6 +366,8 @@ def ask_workflow(
     headers = {
         "Authorization": auth_header,
         "Content-Type": "application/json; charset=utf-8",
+        "Accept": "application/json; charset=utf-8",
+        "Accept-Charset": "utf-8",
     }
     payload = _build_chat_payload(
         query=query,
@@ -358,27 +377,53 @@ def ask_workflow(
         stream=stream_enabled,
         extra_parameters=parameters,
     )
+    trace.append(
+        {
+            "stage": "payload_built",
+            "flow_id": payload.get("flow_id"),
+            "stream": payload.get("stream"),
+            "agent_user_input": _text_encoding_snapshot(str((payload.get("parameters") or {}).get("AGENT_USER_INPUT", ""))),
+        }
+    )
 
     resp, error, code, _ = _send_json_request(endpoint, headers, payload, timeout_seconds, max_retries)
     if resp is None:
-        return {"ok": False, "error": error, "code": code, "raw": None}
+        trace.append({"stage": "request_failed", "error": error, "code": code})
+        return {"ok": False, "error": error, "code": code, "raw": {"_trace": trace}}
     if resp.status_code != 200:
+        trace.append({"stage": "http_error", "status_code": resp.status_code})
         return {
             "ok": False,
             "error": f"workflow HTTP error: {resp.status_code}",
             "code": resp.status_code,
-            "raw": resp.text,
+            "raw": {"response_text": resp.text, "_trace": trace},
         }
 
     body, parse_err = _parse_workflow_response_body(resp, stream_enabled)
     if parse_err:
+        trace.append({"stage": "parse_failed", "error": parse_err})
         return {
             "ok": False,
             "error": parse_err,
             "code": None,
-            "raw": resp.text,
+            "raw": {"response_text": resp.text, "_trace": trace},
         }
-    return _finalize_workflow_result(body or {})
+    trace.append(
+        {
+            "stage": "response_parsed",
+            "workflow_step": (body or {}).get("workflow_step"),
+            "finish_reason": (((body or {}).get("choices") or [{}])[0].get("finish_reason")),
+            "code": (body or {}).get("code"),
+            "message": (body or {}).get("message"),
+        }
+    )
+    result = _finalize_workflow_result(body or {})
+    raw = result.get("raw")
+    if isinstance(raw, dict):
+        raw["_trace"] = trace
+    else:
+        result["raw"] = {"upstream_raw": raw, "_trace": trace}
+    return result
 
 
 def resume_workflow(
@@ -404,6 +449,8 @@ def resume_workflow(
     headers = {
         "Authorization": auth_header,
         "Content-Type": "application/json; charset=utf-8",
+        "Accept": "application/json; charset=utf-8",
+        "Accept-Charset": "utf-8",
     }
     payload: Dict[str, Any] = {
         "event_id": event_id,

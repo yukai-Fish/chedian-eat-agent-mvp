@@ -1,0 +1,48 @@
+const { API_BASE_URL } = require("./config");
+
+function request({ url, method = "GET", data = undefined }) {
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: `${API_BASE_URL}${url}`,
+      method,
+      data,
+      timeout: 60000,
+      header: {
+        "content-type": "application/json; charset=utf-8",
+        Accept: "application/json; charset=utf-8",
+      },
+      success(res) {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(res.data || {});
+          return;
+        }
+        reject(new Error(`HTTP ${res.statusCode}`));
+      },
+      fail(err) {
+        reject(new Error(err.errMsg || "请求失败"));
+      },
+    });
+  });
+}
+
+function fetchRecommendations(payload) {
+  return request({
+    url: "/api/recommend",
+    method: "POST",
+    data: payload,
+  });
+}
+
+function submitFeedback(payload) {
+  return request({
+    url: "/api/feedback",
+    method: "POST",
+    data: payload,
+  });
+}
+
+module.exports = {
+  fetchRecommendations,
+  submitFeedback,
+  API_BASE_URL,
+};

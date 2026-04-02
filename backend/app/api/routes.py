@@ -6,12 +6,16 @@ from app.models.schemas import (
     FeedbackRequest,
     FeedbackResponse,
     EventAckResponse,
+    FavoriteListResponse,
+    FavoriteRemoveRequest,
+    FavoriteWriteRequest,
     HotRankingResponse,
     RankingClickEventRequest,
     RecommendRequest,
     RecommendResponse,
     StoreNameSuggestionsResponse,
 )
+from app.services.favorites_repository import add_favorite, list_favorites, remove_favorite
 from app.services.feedback_repository import save_feedback, suggest_store_names
 from app.services.hot_ranking import get_today_hot_rankings
 from app.services.parser import parse_query
@@ -54,8 +58,37 @@ def ranking_click_event(req: RankingClickEventRequest) -> EventAckResponse:
         shop_id=req.shop_id,
         shop_name=req.shop_name,
         uid=req.uid,
+        anonymous_id=req.anonymousId,
+        user_id=req.userId,
         source="web-ranking",
     )
+    return EventAckResponse(ok=True)
+
+
+@router.get("/favorites", response_model=FavoriteListResponse)
+def get_favorites(user_id: str) -> FavoriteListResponse:
+    uid = user_id.strip()
+    if not uid:
+        raise HTTPException(status_code=400, detail="user_id is required.")
+    items = list_favorites(user_id=uid)
+    return FavoriteListResponse(items=items)
+
+
+@router.post("/favorites", response_model=EventAckResponse)
+def add_favorite_api(req: FavoriteWriteRequest) -> EventAckResponse:
+    add_favorite(
+        user_id=req.userId.strip(),
+        shop_id=req.shopId.strip(),
+        shop_name=(req.shopName or "").strip() or None,
+        anonymous_id=(req.anonymousId or "").strip() or None,
+        source=(req.source or "web").strip() or "web",
+    )
+    return EventAckResponse(ok=True)
+
+
+@router.delete("/favorites", response_model=EventAckResponse)
+def remove_favorite_api(req: FavoriteRemoveRequest) -> EventAckResponse:
+    remove_favorite(user_id=req.userId.strip(), shop_id=req.shopId.strip())
     return EventAckResponse(ok=True)
 
 
@@ -78,6 +111,8 @@ def submit_feedback(req: FeedbackRequest) -> FeedbackResponse:
         {
             "feedback_type": req.feedbackType,
             "store_name": req.storeName.strip(),
+            "anonymous_id": (req.anonymousId or "").strip() or None,
+            "user_id": (req.userId or "").strip() or None,
             "area": (req.area or "").strip() or None,
             "category": (req.category or "").strip() or None,
             "avg_price": req.avgPrice,

@@ -49,3 +49,30 @@ Required constraints:
 - Preserve interrupt/resume semantics (`interrupt` -> `/workflow/v1/resume`).
 - Preserve error code semantics; do not replace contract-level failures with incompatible assumptions.
 - Do not invent request/response shapes that conflict with the documented API contract.
+- Preserve Chinese input integrity end-to-end (UTF-8/Unicode-safe handling); treat any `???`/mojibake in workflow trace as a blocker before business-logic debugging.
+
+## XFYUN Spark X HTTP Contract (Required in spark_local mode)
+
+When recommendation provider is Spark direct mode (`RECOMMEND_PROVIDER=spark_local`), all future changes must follow:
+- [docs/XFYUN_WORKFLOW_API.md](docs/XFYUN_WORKFLOW_API.md) Appendix B
+
+Mandatory constraints:
+- Endpoint/model pairing must be protocol-correct:
+  - X2: `https://spark-api-open.xf-yun.com/x2/chat/completions`
+  - X1.5: `https://spark-api-open.xf-yun.com/v2/chat/completions`
+  - model: `spark-x`
+- Use Spark HTTP `APIpassword` auth (`Authorization: Bearer {APIpassword}`) by default.
+- Preserve `sid` in backend raw payload for traceability.
+- Parse non-stream output from `choices[0].message.content` (with defensive fallbacks).
+- Preserve UTF-8 Chinese integrity end-to-end; any mojibake is a release blocker.
+
+## Identity Baseline (Required)
+
+Current product baseline is anonymous identity first:
+- Generate and persist a stable `anonymousId` per browser/device.
+- Do not require login for recommendation, feedback, or ranking interactions.
+- Pass identity metadata through writes/events where supported.
+
+Future authentication upgrades must preserve backward compatibility:
+- Keep historical anonymous feedback/event records queryable after auth is introduced.
+- Avoid breaking schema/API assumptions that currently rely on `anonymousId`.

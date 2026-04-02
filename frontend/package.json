@@ -9,13 +9,19 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@auth/prisma-adapter": "^2.11.0",
+    "@prisma/client": "^6.8.2",
     "next": "^15.5.12",
+    "next-auth": "^5.0.0-beta.29",
+    "nodemailer": "^7.0.7",
     "react": "19.1.1",
     "react-dom": "19.1.1"
   },
   "devDependencies": {
     "@types/node": "22.14.1",
+    "@types/nodemailer": "^6.4.17",
     "@types/react": "19.1.10",
+    "prisma": "^6.8.2",
     "typescript": "5.9.2"
   }
 }

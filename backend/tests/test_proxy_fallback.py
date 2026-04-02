@@ -7,6 +7,7 @@ client = TestClient(app)
 
 
 def test_proxy_recommend_passthrough_when_workflow_unstructured(monkeypatch) -> None:
+    monkeypatch.setenv("RECOMMEND_PROVIDER", "workflow")
     monkeypatch.setattr(
         "app.api.proxy_routes.ask_workflow",
         lambda **kwargs: {
@@ -35,6 +36,7 @@ def test_proxy_recommend_passthrough_when_workflow_unstructured(monkeypatch) -> 
 
 
 def test_proxy_recommend_passthrough_when_card_friendly(monkeypatch) -> None:
+    monkeypatch.setenv("RECOMMEND_PROVIDER", "workflow")
     workflow_answer = "\n".join(
         [
             "1. 川香阁",
@@ -73,6 +75,7 @@ def test_proxy_recommend_passthrough_when_card_friendly(monkeypatch) -> None:
 
 
 def test_proxy_recommend_passthrough_when_structured_json(monkeypatch) -> None:
+    monkeypatch.setenv("RECOMMEND_PROVIDER", "workflow")
     workflow_answer = (
         '{"query":"test","summary":"s","batch_size":3,"total_count":6,'
         '"recommendations":[{"name":"A","score":92,"reason":"r",'

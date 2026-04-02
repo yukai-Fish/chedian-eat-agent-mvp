@@ -1,0 +1,14 @@
+{
+  "pages": [
+    "pages/index/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "成电吃什么",
+    "navigationBarBackgroundColor": "#f7f2e6",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f7f2e6",
+    "backgroundTextStyle": "light"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

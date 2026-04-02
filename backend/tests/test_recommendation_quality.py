@@ -15,6 +15,7 @@ def test_case_spicy_group_dinner_qingshuihe() -> None:
     assert data["parsed"]["location"] == "清水河"
     assert data["parsed"]["taste"] == "辣"
     assert data["parsed"]["scene"] == "同学聚餐"
+    assert data["parsed"]["time"] == "晚餐"
     assert data["recommendations"][0]["name"] in {"川味小馆", "韩式拌饭屋"}
 
 
@@ -26,6 +27,8 @@ def test_case_light_solo_lunch_shahe() -> None:
     assert resp.status_code == 200
     assert data["parsed"]["location"] == "沙河"
     assert data["parsed"]["scene"] == "一个人"
+    assert data["parsed"]["taste"] == "清淡"
+    assert data["parsed"]["time"] == "午餐"
     assert data["recommendations"][0]["name"] == "番茄牛腩粉"
 
 
@@ -37,4 +40,7 @@ def test_case_night_snack_qingshuihe() -> None:
 
     assert resp.status_code == 200
     assert data["parsed"]["time"] == "夜宵"
+    assert data["parsed"]["location"] == "清水河"
+    assert data["parsed"]["taste"] == "辣"
+    assert data["parsed"]["scene"] == "同学聚餐"
     assert "深夜小串" in names

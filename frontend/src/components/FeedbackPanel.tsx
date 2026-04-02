@@ -23,9 +23,11 @@ const toggleTag = (list: string[], value: string) => {
 
 type FeedbackPanelProps = {
   showHeader?: boolean;
+  anonymousId?: string;
+  userId?: string;
 };
 
-export function FeedbackPanel({ showHeader = true }: FeedbackPanelProps) {
+export function FeedbackPanel({ showHeader = true, anonymousId, userId }: FeedbackPanelProps) {
   const [mode, setMode] = useState<Mode>("new_store");
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
@@ -90,6 +92,8 @@ export function FeedbackPanel({ showHeader = true }: FeedbackPanelProps) {
     const payload: FeedbackPayload = {
       feedbackType: "new_store",
       storeName: newStoreForm.storeName.trim(),
+      anonymousId,
+      userId,
       area: newStoreForm.area.trim() || undefined,
       category: newStoreForm.category.trim() || undefined,
       avgPrice: newStoreForm.avgPrice ? Number(newStoreForm.avgPrice) : undefined,
@@ -124,6 +128,8 @@ export function FeedbackPanel({ showHeader = true }: FeedbackPanelProps) {
     const payload: FeedbackPayload = {
       feedbackType: "dining_feedback",
       storeName: feedbackForm.storeName.trim(),
+      anonymousId,
+      userId,
       rating: feedbackForm.rating,
       sceneTags: feedbackForm.sceneTags,
       tasteTags: feedbackForm.tasteTags,

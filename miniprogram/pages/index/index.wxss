@@ -1,0 +1,273 @@
+.page {
+  padding: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.hero,
+.composer,
+.result,
+.error {
+  padding: 24rpx;
+}
+
+.hero-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.title {
+  font-size: 56rpx;
+  font-weight: 800;
+  color: #132238;
+}
+
+.subtitle {
+  margin-top: 8rpx;
+  color: #5d6a7f;
+  font-size: 24rpx;
+}
+
+.identity {
+  font-size: 22rpx;
+  color: #7b5b2a;
+  padding: 10rpx 16rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1rpx solid rgba(193, 154, 82, 0.34);
+}
+
+.summary {
+  margin-top: 18rpx;
+  color: #3e4f69;
+  line-height: 1.6;
+}
+
+.query-input {
+  width: 100%;
+  min-height: 160rpx;
+  border-radius: 20rpx;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1rpx solid rgba(193, 154, 82, 0.3);
+  padding: 18rpx;
+  box-sizing: border-box;
+}
+
+.quick-wrap {
+  margin-top: 16rpx;
+  display: flex;
+  gap: 10rpx;
+  flex-wrap: wrap;
+}
+
+.quick-item {
+  font-size: 22rpx;
+  color: #6f5628;
+  border: 1rpx solid rgba(193, 154, 82, 0.35);
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 999rpx;
+  padding: 10rpx 18rpx;
+}
+
+.action-row {
+  margin-top: 18rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.feedback-btn {
+  font-size: 24rpx;
+  border-radius: 999rpx;
+  padding: 0 24rpx;
+  height: 72rpx;
+  line-height: 72rpx;
+}
+
+.submit-btn {
+  width: 180rpx;
+  height: 72rpx;
+  line-height: 72rpx;
+  border-radius: 18rpx;
+}
+
+.error {
+  color: #b13a3a;
+  border-color: rgba(194, 80, 80, 0.32);
+}
+
+.result-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.result-title {
+  font-size: 44rpx;
+  font-weight: 700;
+}
+
+.batch-btn {
+  height: 64rpx;
+  line-height: 64rpx;
+  border-radius: 14rpx;
+  font-size: 24rpx;
+}
+
+.empty {
+  color: #6c7890;
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.raw-title {
+  margin-top: 12rpx;
+  color: #3f4e66;
+  font-weight: 600;
+}
+
+.raw-text {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.card {
+  margin-top: 14rpx;
+  border-radius: 22rpx;
+  padding: 20rpx;
+  border: 1rpx solid rgba(193, 154, 82, 0.3);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(255, 250, 238, 0.86));
+}
+
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-name {
+  font-size: 36rpx;
+  font-weight: 700;
+}
+
+.score {
+  font-size: 22rpx;
+  color: #fff;
+  border-radius: 999rpx;
+  padding: 8rpx 16rpx;
+  background: linear-gradient(120deg, #70532f 0%, #3f5bd2 100%);
+}
+
+.field {
+  margin-top: 12rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.label {
+  font-size: 24rpx;
+  color: #25324a;
+  font-weight: 600;
+}
+
+.value {
+  font-size: 27rpx;
+  color: #51607a;
+  line-height: 1.5;
+}
+
+.mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(14, 20, 36, 0.36);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24rpx;
+  box-sizing: border-box;
+}
+
+.modal {
+  width: 100%;
+  max-height: 85vh;
+  overflow: auto;
+  padding: 22rpx;
+}
+
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-title {
+  font-size: 34rpx;
+  font-weight: 700;
+}
+
+.close {
+  font-size: 30rpx;
+  padding: 6rpx 12rpx;
+  color: #576685;
+}
+
+.tab-row {
+  margin-top: 14rpx;
+  display: flex;
+  gap: 10rpx;
+}
+
+.tab {
+  flex: 1;
+  text-align: center;
+  padding: 12rpx 0;
+  border-radius: 14rpx;
+  color: #7a5b2c;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1rpx solid rgba(193, 154, 82, 0.34);
+}
+
+.tab-active {
+  background: linear-gradient(130deg, #f1e2be, #f5d493);
+  border-color: rgba(176, 132, 62, 0.48);
+  color: #5e431f;
+  font-weight: 600;
+}
+
+.form-row {
+  margin-top: 14rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.form-label {
+  font-size: 24rpx;
+  color: #4d5c77;
+}
+
+.form-input,
+.form-textarea {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1rpx solid rgba(193, 154, 82, 0.32);
+  border-radius: 14rpx;
+  padding: 14rpx;
+  box-sizing: border-box;
+}
+
+.form-textarea {
+  min-height: 130rpx;
+}
+
+.submit-feedback-btn {
+  margin-top: 20rpx;
+  height: 76rpx;
+  line-height: 76rpx;
+  border-radius: 14rpx;
+}

@@ -41,6 +41,8 @@ class HistoryMessage(BaseModel):
 class WorkflowRecommendRequest(BaseModel):
     query: str = Field(..., min_length=1, description="user query")
     uid: Optional[str] = None
+    anonymousId: Optional[str] = None
+    userId: Optional[str] = None
     chatId: Optional[str] = None
     stream: Optional[bool] = None
     parameters: Optional[dict] = None
@@ -95,15 +97,46 @@ class RankingClickEventRequest(BaseModel):
     shop_id: str = Field(..., min_length=1)
     shop_name: Optional[str] = None
     uid: Optional[str] = None
+    anonymousId: Optional[str] = None
+    userId: Optional[str] = None
 
 
 class EventAckResponse(BaseModel):
     ok: bool = True
 
 
+class FavoriteWriteRequest(BaseModel):
+    userId: str = Field(..., min_length=1, max_length=120)
+    shopId: str = Field(..., min_length=1, max_length=120)
+    shopName: Optional[str] = Field(default=None, max_length=120)
+    anonymousId: Optional[str] = Field(default=None, max_length=80)
+    source: Optional[str] = Field(default="web", max_length=60)
+
+
+class FavoriteRemoveRequest(BaseModel):
+    userId: str = Field(..., min_length=1, max_length=120)
+    shopId: str = Field(..., min_length=1, max_length=120)
+
+
+class FavoriteItem(BaseModel):
+    id: int
+    user_id: str
+    anonymous_id: Optional[str] = None
+    shop_id: str
+    shop_name: Optional[str] = None
+    source: str
+    created_at: str
+
+
+class FavoriteListResponse(BaseModel):
+    items: List[FavoriteItem]
+
+
 class FeedbackRequest(BaseModel):
     feedbackType: str = Field(..., pattern="^(new_store|dining_feedback)$")
     storeName: str = Field(..., min_length=1, max_length=80)
+    anonymousId: Optional[str] = Field(default=None, max_length=80)
+    userId: Optional[str] = Field(default=None, max_length=80)
     area: Optional[str] = Field(default=None, max_length=40)
     category: Optional[str] = Field(default=None, max_length=40)
     avgPrice: Optional[int] = Field(default=None, ge=0, le=500)

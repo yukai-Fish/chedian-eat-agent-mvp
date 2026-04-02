@@ -3,14 +3,20 @@
 import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import Image from "next/image";
+import { signIn, signOut, useSession } from "next-auth/react";
 
 import { FeedbackPanel } from "@/components/FeedbackPanel";
 import { parseAnswerToRecommendationResult } from "@/lib/answerFormatter";
+import { getCurrentIdentity, setAuthenticatedUserId, type CurrentIdentity } from "@/lib/identity";
 import {
+  addFavorite,
+  fetchFavorites,
   fetchRecommendations,
   fetchTodayHotRanking,
+  removeFavorite,
   reportRankingClick,
   resumeRecommendations,
+  type FavoriteItem,
   type HistoryMessage,
   type HotRankingItem,
 } from "@/lib/api";
@@ -148,11 +154,12 @@ const displayOrFallback = (value: string, fallback = "未提供") => {
 };
 
 export default function HomePage() {
+  const { data: session, status: sessionStatus } = useSession();
   const [query, setQuery] = useState("预算30，清水河，晚上和同学想吃辣的");
   const [history, setHistory] = useState<HistoryMessage[]>([]);
   const [answer, setAnswer] = useState("");
   const [chatId, setChatId] = useState<string | undefined>(undefined);
-  const [uid] = useState("demo-user");
+  const [identity, setIdentity] = useState<CurrentIdentity | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorTrace, setErrorTrace] = useState<WorkflowTraceItem[]>([]);
@@ -160,13 +167,20 @@ export default function HomePage() {
   const [resumeInput, setResumeInput] = useState("");
   const [resumeLoading, setResumeLoading] = useState(false);
   const [rankingOpen, setRankingOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [rankingItems, setRankingItems] = useState<HotRankingItem[]>(CAMPUS_HOT_RANKING_FALLBACK);
   const [rankingLoading, setRankingLoading] = useState(false);
   const [isComposerFocused, setIsComposerFocused] = useState(false);
   const [resultTransitionKey, setResultTransitionKey] = useState(0);
   const [currentBatchIndex, setCurrentBatchIndex] = useState(0);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
+  const [favoritesLoading, setFavoritesLoading] = useState(false);
   const rankingWrapRef = useRef<HTMLDivElement>(null);
+  const accountWrapRef = useRef<HTMLDivElement>(null);
   const rankingLoadRef = useRef<(() => Promise<void>) | null>(null);
 
   const parsedRecommendation = useMemo(() => parseAnswerToRecommendationResult(answer), [answer]);
@@ -198,6 +212,56 @@ export default function HomePage() {
     const isMac = /Mac|iPhone|iPad/i.test(navigator.platform);
     return isMac ? "Enter 发送 · Shift+Enter 换行 · Cmd+Enter 快速发送" : "Enter 发送 · Shift+Enter 换行 · Ctrl+Enter 快速发送";
   }, []);
+  const isLoggedIn = sessionStatus === "authenticated" && !!session?.user?.id;
+  const sessionUserId = session?.user?.id || null;
+
+  useEffect(() => {
+    const localIdentity = getCurrentIdentity();
+    setIdentity(localIdentity);
+  }, []);
+
+  useEffect(() => {
+    if (!identity) return;
+    const merged = setAuthenticatedUserId(sessionUserId);
+    setIdentity(merged);
+  }, [sessionUserId, identity?.anonymousId]);
+
+  useEffect(() => {
+    if (!identity?.anonymousId || !sessionUserId) return;
+    const controller = new AbortController();
+    void fetch("/api/auth/link-anonymous", {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ anonymousId: identity.anonymousId }),
+      signal: controller.signal,
+    }).catch(() => {
+      // non-blocking
+    });
+    return () => controller.abort();
+  }, [identity?.anonymousId, sessionUserId]);
+
+  useEffect(() => {
+    if (!sessionUserId) {
+      setFavorites([]);
+      return;
+    }
+    let canceled = false;
+    const load = async () => {
+      try {
+        setFavoritesLoading(true);
+        const items = await fetchFavorites(sessionUserId);
+        if (!canceled) setFavorites(items);
+      } catch {
+        if (!canceled) setFavorites([]);
+      } finally {
+        if (!canceled) setFavoritesLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      canceled = true;
+    };
+  }, [sessionUserId]);
 
   const submitQuery = async (nextQuery: string) => {
     const text = nextQuery.trim();
@@ -211,7 +275,9 @@ export default function HomePage() {
 
       const res = await fetchRecommendations({
         query: text,
-        uid,
+        uid: identity?.userId || identity?.anonymousId,
+        anonymousId: identity?.anonymousId,
+        userId: identity?.userId || undefined,
         chatId,
         history,
       });
@@ -315,18 +381,74 @@ export default function HomePage() {
     await submitQuery(query);
   };
 
+  const handleEmailLogin = async () => {
+    const email = loginEmail.trim();
+    if (!email || authLoading) return;
+    try {
+      setAuthLoading(true);
+      setAuthNotice(null);
+      const res = await signIn("nodemailer", { email, redirect: false });
+      if (res?.error) {
+        setAuthNotice(`登录请求失败：${res.error}`);
+      } else {
+        setAuthNotice("登录链接已发送，请前往邮箱完成验证。");
+      }
+    } catch (e) {
+      setAuthNotice(e instanceof Error ? e.message : "登录请求失败，请稍后重试。");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await signOut({ redirect: false });
+    setAuthNotice("你已退出登录，当前为匿名模式。");
+  };
+
+  const toggleFavorite = async (shopName: string) => {
+    if (!sessionUserId || !identity?.anonymousId) {
+      setAuthNotice("请先登录后收藏。");
+      return;
+    }
+    const shopId = shopName.trim();
+    if (!shopId) return;
+    const exists = favorites.some((item) => item.shop_id === shopId);
+    try {
+      if (exists) {
+        await removeFavorite({ userId: sessionUserId, shopId });
+        setFavorites((prev) => prev.filter((item) => item.shop_id !== shopId));
+      } else {
+        await addFavorite({
+          userId: sessionUserId,
+          shopId,
+          shopName,
+          anonymousId: identity.anonymousId,
+        });
+        const latest = await fetchFavorites(sessionUserId);
+        setFavorites(latest);
+      }
+    } catch (e) {
+      setAuthNotice(e instanceof Error ? e.message : "收藏操作失败，请稍后重试。");
+    }
+  };
+
   useEffect(() => {
-    const onDown = (event: MouseEvent) => {
-      const node = rankingWrapRef.current;
-      if (!node || !rankingOpen) return;
-      if (!node.contains(event.target as Node)) {
+      const onDown = (event: MouseEvent) => {
+      const rankingNode = rankingWrapRef.current;
+      const accountNode = accountWrapRef.current;
+
+      if (rankingOpen && rankingNode && !rankingNode.contains(event.target as Node)) {
         setRankingOpen(false);
+      }
+      if (accountOpen && accountNode && !accountNode.contains(event.target as Node)) {
+        setAccountOpen(false);
       }
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setRankingOpen(false);
+        setAccountOpen(false);
         setFeedbackOpen(false);
       }
     };
@@ -337,7 +459,7 @@ export default function HomePage() {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [rankingOpen]);
+  }, [rankingOpen, accountOpen]);
 
   useEffect(() => {
     if (!feedbackOpen) return;
@@ -398,83 +520,165 @@ export default function HomePage() {
         <section className="hero-card">
           <div className="hero-top">
             <div className="hero-badge">Campus AI Food Agent</div>
-            <div className="emblem-widget" ref={rankingWrapRef}>
-              <button
-                type="button"
-                className="school-badge school-badge-btn"
-                aria-label="电子科技大学校徽"
-                aria-expanded={rankingOpen}
-                onClick={() => setRankingOpen((v) => !v)}
-              >
-                <span className="school-badge-icon">
-                  <Image src="/image/xiaohui.png" alt="UESTC Emblem" width={36} height={36} priority />
-                </span>
-                <span className="school-badge-text">
-                  <b>UESTC</b>
-                  <em>电子科技大学</em>
-                </span>
-                <span className={`badge-caret ${rankingOpen ? "open" : ""}`} aria-hidden>
-                  ▾
-                </span>
-              </button>
-
-              <section className={`ranking-popover ${rankingOpen ? "open" : ""}`} aria-hidden={!rankingOpen}>
-                <div className="ranking-head">
-                  <div className="ranking-head-main">
-                    <h3>今日热门美食榜</h3>
-                    <p>看看同学们今天都在吃什么</p>
+            <div className="hero-actions">
+              <div className="account-widget" ref={accountWrapRef}>
+                <button
+                  type="button"
+                  className="account-entry-btn"
+                  aria-label="登录与个人中心入口"
+                  aria-expanded={accountOpen}
+                  onClick={() => setAccountOpen((prev) => !prev)}
+                >
+                  <span className="account-icon" aria-hidden>
+                    ◉
+                  </span>
+                  <span className="account-copy">
+                    <b>{isLoggedIn ? "我的账号" : "登录 / 我的"}</b>
+                    <em>{isLoggedIn ? "已登录" : sessionStatus === "loading" ? "状态加载中..." : "当前为匿名使用"}</em>
+                  </span>
+                </button>
+                <section className={`account-popover ${accountOpen ? "open" : ""}`} aria-hidden={!accountOpen}>
+                  <h3>{isLoggedIn ? "我的账号" : "登录后同步数据"}</h3>
+                  <p>
+                    {isLoggedIn
+                      ? "已启用账号身份，可同步收藏、反馈记录与个性化偏好。"
+                      : "当前为匿名使用，推荐功能可直接使用；登录后可跨设备同步收藏与记录。"}
+                  </p>
+                  <div className="account-id-card">
+                    <span>访客标识</span>
+                    <code>{identity?.anonymousId || "正在初始化..."}</code>
                   </div>
-                  <button
-                    type="button"
-                    className="ranking-refresh-btn"
-                    onClick={() => {
-                      if (!rankingLoading) {
-                        void rankingLoadRef.current?.();
-                      }
-                    }}
-                    disabled={rankingLoading}
-                    aria-label="刷新热门榜"
-                  >
-                    <span className={`refresh-icon ${rankingLoading ? "spinning" : ""}`} aria-hidden>
-                      ↻
-                    </span>
-                    刷新
-                  </button>
-                </div>
-                {rankingLoading && <div className="ranking-loading">正在更新今日榜单...</div>}
-                <div className="ranking-list">
-                  {rankingItems.map((item, idx) => {
-                    const trendMeta = getTrendMeta(item.trend, item.delta);
-                    return (
-                      <button
-                        key={item.shop_id || item.name}
-                        type="button"
-                        className={`rank-item rank-${idx + 1}`}
-                        style={{ "--rank-delay": `${idx * 45}ms` } as CSSProperties}
-                        onClick={() => {
-                          void reportRankingClick({
-                            shopId: item.shop_id,
-                            shopName: item.name,
-                            uid,
-                          });
-                          setQuery(item.query);
-                          setRankingOpen(false);
-                        }}
-                      >
-                        <span className="rank-no">{idx + 1}</span>
-                        <span className="rank-main">
-                          <strong>
-                            {item.name}
-                            <span className={`rank-trend rank-trend-${trendMeta.cls}`}>{trendMeta.arrow}</span>
-                          </strong>
-                          <em>{item.tag}</em>
-                          <small className={`rank-trend-text rank-trend-${trendMeta.cls}`}>{trendMeta.text}</small>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
+                  <div className="account-actions">
+                    {!isLoggedIn && (
+                      <>
+                        <input
+                          className="account-email-input"
+                          placeholder="输入邮箱获取登录链接"
+                          value={loginEmail}
+                          onChange={(e) => setLoginEmail(e.target.value)}
+                          type="email"
+                        />
+                        <button type="button" className="account-action-primary" onClick={() => void handleEmailLogin()} disabled={authLoading}>
+                          {authLoading ? "发送中..." : "邮箱登录"}
+                        </button>
+                      </>
+                    )}
+                    {isLoggedIn && (
+                      <>
+                        <div className="account-user-line">
+                          已登录账号：<b>{session?.user?.email || session?.user?.name || "未命名用户"}</b>
+                        </div>
+                        <button type="button" className="account-action-primary" onClick={() => void handleLogout()}>
+                          退出登录
+                        </button>
+                      </>
+                    )}
+                    <button type="button" disabled>
+                      我的反馈（即将开放）
+                    </button>
+                  </div>
+                  {authNotice && <div className="account-notice">{authNotice}</div>}
+                  {isLoggedIn && (
+                    <div className="favorite-quick-list">
+                      <span>我的收藏（{favoritesLoading ? "加载中..." : favorites.length}）</span>
+                      <div className="favorite-chip-row">
+                        {favorites.slice(0, 6).map((item) => (
+                          <button
+                            key={`${item.user_id}-${item.shop_id}`}
+                            type="button"
+                            className="favorite-chip active"
+                            onClick={() => setQuery(item.shop_name || item.shop_id)}
+                          >
+                            {item.shop_name || item.shop_id}
+                          </button>
+                        ))}
+                        {!favoritesLoading && favorites.length === 0 && <em>还没有收藏，先去推荐卡片点一个吧。</em>}
+                      </div>
+                    </div>
+                  )}
+                </section>
+              </div>
+
+              <div className="emblem-widget" ref={rankingWrapRef}>
+                <button
+                  type="button"
+                  className="school-badge school-badge-btn"
+                  aria-label="电子科技大学校徽"
+                  aria-expanded={rankingOpen}
+                  onClick={() => setRankingOpen((v) => !v)}
+                >
+                  <span className="school-badge-icon">
+                    <Image src="/image/xiaohui.png" alt="UESTC Emblem" width={36} height={36} priority />
+                  </span>
+                  <span className="school-badge-text">
+                    <b>UESTC</b>
+                    <em>电子科技大学</em>
+                  </span>
+                  <span className={`badge-caret ${rankingOpen ? "open" : ""}`} aria-hidden>
+                    ▾
+                  </span>
+                </button>
+
+                <section className={`ranking-popover ${rankingOpen ? "open" : ""}`} aria-hidden={!rankingOpen}>
+                  <div className="ranking-head">
+                    <div className="ranking-head-main">
+                      <h3>今日热门美食榜</h3>
+                      <p>看看同学们今天都在吃什么</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="ranking-refresh-btn"
+                      onClick={() => {
+                        if (!rankingLoading) {
+                          void rankingLoadRef.current?.();
+                        }
+                      }}
+                      disabled={rankingLoading}
+                      aria-label="刷新热门榜"
+                    >
+                      <span className={`refresh-icon ${rankingLoading ? "spinning" : ""}`} aria-hidden>
+                        ↻
+                      </span>
+                      刷新
+                    </button>
+                  </div>
+                  {rankingLoading && <div className="ranking-loading">正在更新今日榜单...</div>}
+                  <div className="ranking-list">
+                    {rankingItems.map((item, idx) => {
+                      const trendMeta = getTrendMeta(item.trend, item.delta);
+                      return (
+                        <button
+                          key={item.shop_id || item.name}
+                          type="button"
+                          className={`rank-item rank-${idx + 1}`}
+                          style={{ "--rank-delay": `${idx * 45}ms` } as CSSProperties}
+                          onClick={() => {
+                            void reportRankingClick({
+                              shopId: item.shop_id,
+                              shopName: item.name,
+                              uid: identity?.userId || identity?.anonymousId,
+                              anonymousId: identity?.anonymousId,
+                              userId: identity?.userId || undefined,
+                            });
+                            setQuery(item.query);
+                            setRankingOpen(false);
+                          }}
+                        >
+                          <span className="rank-no">{idx + 1}</span>
+                          <span className="rank-main">
+                            <strong>
+                              {item.name}
+                              <span className={`rank-trend rank-trend-${trendMeta.cls}`}>{trendMeta.arrow}</span>
+                            </strong>
+                            <em>{item.tag}</em>
+                            <small className={`rank-trend-text rank-trend-${trendMeta.cls}`}>{trendMeta.text}</small>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              </div>
             </div>
           </div>
           <h1>成电吃什么</h1>
@@ -687,6 +891,13 @@ export default function HomePage() {
                         {typeof primaryCard.score === "number" && (
                           <span className="score-chip">{primaryCard.score}% 匹配</span>
                         )}
+                        <button
+                          type="button"
+                          className={`favorite-chip ${favorites.some((item) => item.shop_id === primaryCard.name) ? "active" : ""}`}
+                          onClick={() => void toggleFavorite(primaryCard.name)}
+                        >
+                          {favorites.some((item) => item.shop_id === primaryCard.name) ? "已收藏" : "收藏"}
+                        </button>
                         <span className="rank-tag champion">BEST MATCH</span>
                       </div>
                     </div>
@@ -729,6 +940,13 @@ export default function HomePage() {
                             {typeof card.score === "number" && (
                               <span className="score-chip">{card.score}% 匹配</span>
                             )}
+                            <button
+                              type="button"
+                              className={`favorite-chip ${favorites.some((item) => item.shop_id === card.name) ? "active" : ""}`}
+                              onClick={() => void toggleFavorite(card.name)}
+                            >
+                              {favorites.some((item) => item.shop_id === card.name) ? "已收藏" : "收藏"}
+                            </button>
                             <span className="rank-tag">TOP {idx + 2}</span>
                           </div>
                         </div>
@@ -808,7 +1026,7 @@ export default function HomePage() {
             </button>
           </div>
           <div className="feedback-modal-body">
-            <FeedbackPanel showHeader={false} />
+            <FeedbackPanel showHeader={false} anonymousId={identity?.anonymousId} userId={identity?.userId || undefined} />
           </div>
         </section>
       </div>
