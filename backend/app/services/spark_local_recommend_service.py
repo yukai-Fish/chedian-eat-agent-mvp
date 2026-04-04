@@ -186,6 +186,9 @@ def ask_spark_local_recommend(
     temperature = float(os.getenv("XFYUN_SPARKX_TEMPERATURE", "0.3"))
     max_tokens = int(os.getenv("XFYUN_SPARKX_MAX_TOKENS", "1800"))
     model = os.getenv("XFYUN_SPARKX_MODEL", "spark-x").strip() or "spark-x"
+    thinking_mode = os.getenv("XFYUN_SPARKX_THINKING", "disabled").strip().lower() or "disabled"
+    if thinking_mode not in {"enabled", "disabled", "auto"}:
+        thinking_mode = "disabled"
 
     shops = _candidate_shops(query, limit=30)
     payload = {
@@ -195,6 +198,7 @@ def ask_spark_local_recommend(
         "temperature": temperature,
         "max_tokens": max_tokens,
         "user": uid or "web-user",
+        "thinking": {"type": thinking_mode},
     }
 
     headers = _headers()

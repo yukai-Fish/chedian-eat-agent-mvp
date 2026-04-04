@@ -28,6 +28,7 @@
       <button class="ghost-btn feedback-btn" bindtap="openFeedback">✦ 反馈新店 / 用餐体验</button>
       <button class="gold-btn submit-btn" loading="{{loading}}" bindtap="onSubmitQuery">发送</button>
     </view>
+    <view wx:if="{{loading}}" class="loading-tip">正在生成推荐，通常需要 10-40 秒，请稍候…</view>
   </view>
 
   <view wx:if="{{error}}" class="error glass-card">{{error}}</view>

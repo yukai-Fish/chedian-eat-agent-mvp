@@ -78,6 +78,12 @@
   align-items: center;
 }
 
+.loading-tip {
+  margin-top: 12rpx;
+  font-size: 22rpx;
+  color: #7e8698;
+}
+
 .feedback-btn {
   font-size: 24rpx;
   border-radius: 999rpx;
