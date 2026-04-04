@@ -1,4 +1,5 @@
 import csv
+import hashlib
 import os
 import sqlite3
 from pathlib import Path
@@ -24,6 +25,14 @@ def _connect() -> sqlite3.Connection:
 def _ensure_schema(conn: sqlite3.Connection) -> None:
     schema_sql = SCHEMA_PATH.read_text(encoding="utf-8")
     conn.executescript(schema_sql)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS app_meta (
+          key TEXT PRIMARY KEY,
+          value TEXT
+        )
+        """
+    )
 
 
 def _table_has_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
@@ -43,14 +52,45 @@ def _ensure_compat_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE feedback_submissions ADD COLUMN user_id TEXT")
 
 
-def _seed_from_csv_if_empty(conn: sqlite3.Connection) -> None:
-    row = conn.execute("SELECT COUNT(1) AS cnt FROM shops").fetchone()
-    if row and int(row["cnt"]) > 0:
-        return
+def _seed_signature() -> str:
+    data = SEED_CSV_PATH.read_bytes()
+    return hashlib.sha256(data).hexdigest()
 
+
+def _meta_get(conn: sqlite3.Connection, key: str) -> str | None:
+    row = conn.execute("SELECT value FROM app_meta WHERE key = ?", (key,)).fetchone()
+    if not row:
+        return None
+    return str(row["value"]) if row["value"] is not None else None
+
+
+def _meta_set(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute(
+        """
+        INSERT INTO app_meta(key, value)
+        VALUES(?, ?)
+        ON CONFLICT(key) DO UPDATE SET value=excluded.value
+        """,
+        (key, value),
+    )
+
+
+def _seed_from_csv_if_needed(conn: sqlite3.Connection) -> None:
     with open(SEED_CSV_PATH, "r", encoding="utf-8-sig") as f:
         records = list(csv.DictReader(f))
 
+    desired_signature = _seed_signature()
+    current_signature = _meta_get(conn, "shops_seed_signature")
+    row = conn.execute("SELECT COUNT(1) AS cnt FROM shops").fetchone()
+    current_count = int(row["cnt"]) if row else 0
+
+    # Refresh when:
+    # 1) shops is empty; or
+    # 2) seed file changed since last sync.
+    if current_count > 0 and current_signature == desired_signature:
+        return
+
+    conn.execute("DELETE FROM shops")
     conn.executemany(
         """
         INSERT INTO shops (
@@ -62,17 +102,19 @@ def _seed_from_csv_if_empty(conn: sqlite3.Connection) -> None:
                 item["id"],
                 item["name"],
                 item["campus"],
-                item["area"],
+                item.get("area", ""),
                 int(item["avg_price"]),
-                item["open_hours"],
-                item["tastes"],
-                item["scenes"],
-                item["tags"],
+                item.get("open_hours", ""),
+                item.get("tastes", ""),
+                item.get("scenes", ""),
+                item.get("tags", ""),
                 int(item.get("is_open", 1)),
             )
             for item in records
         ],
     )
+    _meta_set(conn, "shops_seed_signature", desired_signature)
+    _meta_set(conn, "shops_seed_count", str(len(records)))
 
 
 def ensure_database() -> None:
@@ -87,7 +129,7 @@ def ensure_database() -> None:
         with _connect() as conn:
             _ensure_schema(conn)
             _ensure_compat_columns(conn)
-            _seed_from_csv_if_empty(conn)
+            _seed_from_csv_if_needed(conn)
             conn.commit()
         _initialized = True
 
