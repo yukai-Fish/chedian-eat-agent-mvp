@@ -1,6 +1,5 @@
-function safeText(value, fallback) {
-  const text = typeof value === "string" ? value.trim() : "";
-  return text || fallback;
+function asText(value) {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function normalizeScore(value) {
@@ -10,28 +9,36 @@ function normalizeScore(value) {
   return Math.min(100, Math.max(0, rounded));
 }
 
+function stripFence(answer) {
+  const text = asText(answer);
+  if (!text.startsWith("```")) return text;
+  return text.replace(/^```[a-zA-Z0-9_-]*\s*/, "").replace(/\s*```$/, "").trim();
+}
+
 function parseStructured(obj) {
-  if (!obj || typeof obj !== "object") return null;
-  if (!Array.isArray(obj.recommendations)) return null;
+  if (!obj || typeof obj !== "object" || !Array.isArray(obj.recommendations)) {
+    return null;
+  }
 
   const cards = obj.recommendations
     .filter((item) => item && typeof item === "object")
     .map((item) => {
       const score = normalizeScore(item.score);
       return {
-        name: safeText(item.name, "未命名店铺"),
+        name: asText(item.name),
         score,
         scoreLabel: score === null ? "" : `${score}% 匹配`,
-        reason: safeText(item.reason, "暂无推荐理由"),
-        recommendDish: safeText(item.recommend_dish, "暂无推荐菜"),
-        sceneFit: safeText(item.scene_fit, "暂无场景信息"),
-        warning: safeText(item.warning, "暂无明显不足"),
+        reason: asText(item.reason),
+        recommendDish: asText(item.recommend_dish),
+        sceneFit: asText(item.scene_fit),
+        warning: asText(item.warning),
       };
-    });
+    })
+    .filter((item) => item.name);
 
   return {
     mode: "structured",
-    summary: safeText(obj.summary, "已按当前偏好排序推荐。"),
+    summary: asText(obj.summary),
     cards,
     batchSize: Math.max(1, Number(obj.batch_size) || 3),
     totalCount: Math.max(cards.length, Number(obj.total_count) || cards.length),
@@ -40,32 +47,15 @@ function parseStructured(obj) {
 }
 
 function parseTextFallback(answer) {
-  const text = safeText(answer, "");
-  if (!text) {
-    return {
-      mode: "empty",
-      summary: "暂未获得可展示结果。",
-      cards: [],
-      batchSize: 3,
-      totalCount: 0,
-      rawAnswer: "",
-    };
-  }
-
+  const text = asText(answer);
   return {
-    mode: "raw",
-    summary: "工作流返回了非结构化文本，当前展示原始回答。",
+    mode: text ? "raw" : "empty",
+    summary: "",
     cards: [],
     batchSize: 3,
     totalCount: 0,
     rawAnswer: text,
   };
-}
-
-function stripFence(answer) {
-  const text = safeText(answer, "");
-  if (!text.startsWith("```")) return text;
-  return text.replace(/^```[a-zA-Z0-9_-]*\s*/, "").replace(/\s*```$/, "").trim();
 }
 
 function parseRecommendationAnswer(answer) {
@@ -77,7 +67,7 @@ function parseRecommendationAnswer(answer) {
     const structured = parseStructured(parsed);
     if (structured) return structured;
   } catch (_err) {
-    // fallback below
+    // non-JSON fallback
   }
 
   return parseTextFallback(answer);

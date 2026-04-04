@@ -7,7 +7,7 @@
       </view>
       <view class="identity">{{identityLabel}}</view>
     </view>
-    <view class="summary">{{summary}}</view>
+    <view class="summary">{{summary || "输入你的需求，获取校园美食推荐。"}}</view>
   </view>
 
   <view class="composer glass-card">
@@ -51,19 +51,20 @@
           <text class="card-name">{{item.name}}</text>
           <text wx:if="{{item.scoreLabel}}" class="score">{{item.scoreLabel}}</text>
         </view>
-        <view class="field">
+
+        <view wx:if="{{item.reason}}" class="field">
           <text class="label">推荐理由</text>
           <text class="value">{{item.reason}}</text>
         </view>
-        <view class="field">
+        <view wx:if="{{item.recommendDish}}" class="field">
           <text class="label">推荐菜</text>
           <text class="value">{{item.recommendDish}}</text>
         </view>
-        <view class="field">
+        <view wx:if="{{item.sceneFit}}" class="field">
           <text class="label">适合场景</text>
           <text class="value">{{item.sceneFit}}</text>
         </view>
-        <view class="field">
+        <view wx:if="{{item.warning}}" class="field">
           <text class="label">可能不足</text>
           <text class="value">{{item.warning}}</text>
         </view>
@@ -103,7 +104,7 @@
       </view>
 
       <view class="form-row">
-        <text class="form-label">{{feedbackTab==='dining_feedback'?'用餐评价':'补充说明'}}</text>
+        <text class="form-label">{{feedbackTab==='dining_feedback' ? '用餐评价' : '补充说明'}}</text>
         <textarea class="form-textarea" value="{{feedbackForm.comment}}" data-field="comment" bindinput="onFeedbackFieldInput" maxlength="300" />
       </view>
 
