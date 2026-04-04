@@ -1,5 +1,5 @@
 const DEV_BASE_URL = "http://127.0.0.1:8000";
-const PROD_BASE_URL = "https://chedian-eat-agent-mvp.onrender.com";
+const PROD_BASE_URL = "https://chedian-eat-agent-mvp-1.onrender.com";
 const FORCE_REMOTE_IN_DEV = true;
 
 function resolveApiBaseUrl() {
