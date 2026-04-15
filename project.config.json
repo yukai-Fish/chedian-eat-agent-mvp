@@ -12,7 +12,16 @@
       "outputPath": ""
     },
     "useCompilerPlugins": false,
-    "minifyWXML": true
+    "minifyWXML": true,
+    "compileWorklet": false,
+    "uploadWithSourceMap": true,
+    "packNpmManually": false,
+    "minifyWXSS": true,
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "condition": false,
+    "swc": false,
+    "disableSWC": true
   },
   "compileType": "miniprogram",
   "miniprogramRoot": "miniprogram/",
@@ -21,6 +30,7 @@
     "ignore": [],
     "include": []
   },
-  "appid": "wxa749c6bffc700419",
-  "editorSetting": {}
+  "appid": "wxa6a417a26bb6a7f8",
+  "editorSetting": {},
+  "libVersion": "3.15.1"
 }

@@ -90,7 +90,7 @@ def _candidate_shops(query: str, limit: int = 30) -> List[Dict[str, Any]]:
     ]
 
 
-def _messages(query: str, shops: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+def _messages(query: str, shops: List[Dict[str, Any]], user_profile: Optional[Dict[str, Any]] = None) -> List[Dict[str, str]]:
     system_prompt = """
 You are a ranking assistant for a campus food recommendation app.
 Return STRICT JSON only (no markdown, no extra text) with this shape:
@@ -117,7 +117,18 @@ Rules:
 4) If a field is unknown, use empty string.
 """.strip()
 
-    user_prompt = f"User query: {query}\n\nCandidates(JSON):\n{json.dumps(shops, ensure_ascii=False)}"
+    profile_summary = ""
+    profile_signals = {}
+    if isinstance(user_profile, dict):
+        profile_summary = str(user_profile.get("summary") or "").strip()
+        profile_signals = user_profile.get("signals") if isinstance(user_profile.get("signals"), dict) else {}
+
+    user_prompt = (
+        f"User query: {query}\n\n"
+        f"Iterative profile summary: {profile_summary or 'N/A'}\n"
+        f"Iterative profile signals(JSON): {json.dumps(profile_signals, ensure_ascii=False)}\n\n"
+        f"Candidates(JSON):\n{json.dumps(shops, ensure_ascii=False)}"
+    )
     return [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
@@ -176,13 +187,14 @@ def ask_spark_local_recommend(
     *,
     query: str,
     uid: Optional[str] = None,
+    user_profile: Optional[Dict[str, Any]] = None,
     timeout_seconds: Optional[float] = None,
 ) -> Dict[str, Any]:
     auth, auth_err = _build_auth_header()
     if auth_err:
         return {"ok": False, "error": auth_err, "code": None, "raw": {"source": "spark-local"}}
 
-    timeout = timeout_seconds or float(os.getenv("XFYUN_TIMEOUT_SECONDS", "45"))
+    timeout = timeout_seconds or float(os.getenv("XFYUN_TIMEOUT_SECONDS", "25"))
     temperature = float(os.getenv("XFYUN_SPARKX_TEMPERATURE", "0.3"))
     max_tokens = int(os.getenv("XFYUN_SPARKX_MAX_TOKENS", "1800"))
     model = os.getenv("XFYUN_SPARKX_MODEL", "spark-x").strip() or "spark-x"
@@ -193,7 +205,7 @@ def ask_spark_local_recommend(
     shops = _candidate_shops(query, limit=30)
     payload = {
         "model": model,
-        "messages": _messages(query, shops),
+        "messages": _messages(query, shops, user_profile),
         "stream": False,
         "temperature": temperature,
         "max_tokens": max_tokens,
@@ -287,6 +299,7 @@ def ask_spark_local_recommend(
             "attempts": attempts,
             "usage": parsed.get("usage"),
             "model": model,
+            "profile_summary": str((user_profile or {}).get("summary") or ""),
             "upstream": parsed,
         },
     }

@@ -1,0 +1,163 @@
+.page {
+  padding: 24rpx;
+}
+
+.state-card {
+  border-radius: 18rpx;
+  padding: 22rpx;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1rpx solid rgba(193, 154, 82, 0.3);
+  color: #3f4f69;
+}
+
+.error {
+  color: #b13a3a;
+  border-color: rgba(194, 80, 80, 0.32);
+}
+
+.detail-card {
+  border-radius: 18rpx;
+  padding: 24rpx;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1rpx solid rgba(193, 154, 82, 0.3);
+}
+
+.name {
+  font-size: 44rpx;
+  font-weight: 700;
+  color: #132238;
+}
+
+.meta {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #60708a;
+}
+
+.status-line {
+  margin-top: 14rpx;
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  flex-wrap: wrap;
+}
+
+.status-badge {
+  font-size: 22rpx;
+  border-radius: 999rpx;
+  padding: 6rpx 14rpx;
+  color: #fff;
+}
+
+.status-open {
+  background: linear-gradient(130deg, #2d9d63, #21b86a);
+}
+
+.status-closing {
+  background: linear-gradient(130deg, #d08a2a, #e0a744);
+}
+
+.status-closed {
+  background: linear-gradient(130deg, #6f7a8f, #8793aa);
+}
+
+.status-unknown {
+  background: linear-gradient(130deg, #6f7a8f, #8793aa);
+}
+
+.status-detail {
+  font-size: 22rpx;
+  color: #54647e;
+}
+
+.section {
+  margin-top: 16rpx;
+}
+
+.label {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #2f3c55;
+}
+
+.value {
+  margin-top: 6rpx;
+  font-size: 26rpx;
+  color: #5a6881;
+}
+
+.tags {
+  margin-top: 8rpx;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+}
+
+.tag {
+  font-size: 22rpx;
+  color: #7b5b2a;
+  border: 1rpx solid rgba(193, 154, 82, 0.35);
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 999rpx;
+  padding: 8rpx 14rpx;
+}
+
+.review-head {
+  margin-top: 22rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.review-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1f2e46;
+}
+
+.review-meta {
+  font-size: 22rpx;
+  color: #6a7790;
+}
+
+.empty-review {
+  margin-top: 12rpx;
+  color: #6a7790;
+}
+
+.review-item {
+  margin-top: 12rpx;
+  padding: 16rpx;
+  border-radius: 14rpx;
+  border: 1rpx solid rgba(193, 154, 82, 0.22);
+  background: rgba(255, 250, 238, 0.65);
+}
+
+.review-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.review-rating {
+  font-size: 22rpx;
+  color: #7b5b2a;
+}
+
+.review-time {
+  font-size: 20rpx;
+  color: #8692a8;
+}
+
+.review-content {
+  margin-top: 8rpx;
+  font-size: 26rpx;
+  color: #4d5c77;
+  line-height: 1.5;
+}
+
+.review-extra {
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: #62708a;
+}

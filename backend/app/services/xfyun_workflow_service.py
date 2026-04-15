@@ -7,11 +7,11 @@ import httpx
 
 
 ERROR_HINTS = {
-    20204: "Workflow is unpublished or draft.",
-    20207: "Workflow is unpublished or draft.",
-    20369: "Service busy, please retry later.",
-    20804: "OpenAPI timeout.",
-    23900: "Session timeout or chat not found.",
+    20204: "工作流未发布或仍为草稿。",
+    20207: "工作流未发布或仍为草稿。",
+    20369: "服务忙，请稍后重试。",
+    20804: "OpenAPI 超时。",
+    23900: "会话超时或 chat 不存在。",
 }
 
 
@@ -34,7 +34,7 @@ def _error_hint_by_code(code: Optional[int]) -> Optional[str]:
     if code in ERROR_HINTS:
         return ERROR_HINTS[code]
     if 20900 <= code <= 20903:
-        return "Auth/quota issue. Check key/secret/permissions/quota."
+        return "鉴权或配额异常，请检查 key/secret/权限/额度。"
     return None
 
 
@@ -42,7 +42,7 @@ def _build_authorization() -> Tuple[Optional[str], Optional[str]]:
     api_key = os.getenv("XFYUN_API_KEY", "").strip()
     api_secret = os.getenv("XFYUN_API_SECRET", "").strip()
     if not api_key or not api_secret:
-        return None, "XFYUN_API_KEY or XFYUN_API_SECRET is missing."
+        return None, "XFYUN_API_KEY 或 XFYUN_API_SECRET 未配置。"
     return f"Bearer {api_key}:{api_secret}", None
 
 
@@ -67,7 +67,7 @@ def validate_and_map_history(history: List[Dict[str, Any]]) -> Tuple[Optional[Li
         return [], None
 
     if history[0].get("role") != "user":
-        return None, "history first role must be user."
+        return None, "history 第一条必须是 user。"
 
     mapped: List[Dict[str, Any]] = []
     expected_role = "user"
@@ -251,10 +251,8 @@ def _send_json_request(
 
     for attempt in range(max_retries + 1):
         try:
-            with httpx.Client(timeout=timeout_seconds, trust_env=False, http2=False) as client:
-                # Force UTF-8 JSON bytes with native Chinese characters.
-                body = json.dumps(payload, ensure_ascii=False)
-                resp = client.post(endpoint, headers=headers, content=body.encode("utf-8"))
+            with httpx.Client(timeout=timeout_seconds) as client:
+                resp = client.post(endpoint, headers=headers, json=payload)
             timeout_error = None
             request_error = None
             break
@@ -271,7 +269,7 @@ def _send_json_request(
             return None, request_error, None, None
 
     if resp is None:
-        return None, timeout_error or request_error or "workflow request failed.", 20804, None
+        return None, timeout_error or request_error or "workflow 请求失败。", 20804, None
     return resp, None, None, None
 
 
@@ -347,7 +345,7 @@ def ask_workflow(
 
     app_id = os.getenv("XFYUN_APP_ID", "").strip()
     if not app_id:
-        return {"ok": False, "error": "XFYUN_APP_ID is missing.", "code": None, "raw": {"_trace": trace}}
+        return {"ok": False, "error": "XFYUN_APP_ID 未配置。", "code": None, "raw": {"_trace": trace}}
 
     auth_header, auth_err = _build_authorization()
     if auth_err:
@@ -359,8 +357,8 @@ def ask_workflow(
 
     base_url = os.getenv("XFYUN_BASE_URL", "https://xingchen-api.xf-yun.com").rstrip("/")
     endpoint = f"{base_url}/workflow/v1/chat/completions"
-    timeout_seconds = float(os.getenv("XFYUN_TIMEOUT_SECONDS", "45"))
-    max_retries = int(os.getenv("XFYUN_MAX_RETRIES", "2"))
+    timeout_seconds = float(os.getenv("XFYUN_TIMEOUT_SECONDS", "25"))
+    max_retries = int(os.getenv("XFYUN_MAX_RETRIES", "1"))
     stream_enabled = stream if stream is not None else os.getenv("XFYUN_STREAM", "false").lower() == "true"
 
     headers = {
@@ -394,7 +392,7 @@ def ask_workflow(
         trace.append({"stage": "http_error", "status_code": resp.status_code})
         return {
             "ok": False,
-            "error": f"workflow HTTP error: {resp.status_code}",
+            "error": f"workflow HTTP 错误: {resp.status_code}",
             "code": resp.status_code,
             "raw": {"response_text": resp.text, "_trace": trace},
         }
@@ -434,7 +432,7 @@ def resume_workflow(
 ) -> Dict[str, Any]:
     app_id = os.getenv("XFYUN_APP_ID", "").strip()
     if not app_id:
-        return {"ok": False, "error": "XFYUN_APP_ID is missing.", "code": None, "raw": None}
+        return {"ok": False, "error": "XFYUN_APP_ID 未配置。", "code": None, "raw": None}
 
     auth_header, auth_err = _build_authorization()
     if auth_err:
@@ -442,8 +440,8 @@ def resume_workflow(
 
     base_url = os.getenv("XFYUN_BASE_URL", "https://xingchen-api.xf-yun.com").rstrip("/")
     endpoint = f"{base_url}/workflow/v1/resume"
-    timeout_seconds = float(os.getenv("XFYUN_TIMEOUT_SECONDS", "45"))
-    max_retries = int(os.getenv("XFYUN_MAX_RETRIES", "2"))
+    timeout_seconds = float(os.getenv("XFYUN_TIMEOUT_SECONDS", "25"))
+    max_retries = int(os.getenv("XFYUN_MAX_RETRIES", "1"))
     stream_enabled = stream if stream is not None else os.getenv("XFYUN_STREAM", "false").lower() == "true"
 
     headers = {
@@ -465,7 +463,7 @@ def resume_workflow(
     if resp.status_code != 200:
         return {
             "ok": False,
-            "error": f"workflow resume HTTP error: {resp.status_code}",
+            "error": f"workflow resume HTTP 错误: {resp.status_code}",
             "code": resp.status_code,
             "raw": resp.text,
         }
@@ -484,7 +482,7 @@ def resume_workflow(
 def upload_workflow_file(file_name: str, content: bytes, content_type: str = "application/octet-stream") -> Dict[str, Any]:
     app_id = os.getenv("XFYUN_APP_ID", "").strip()
     if not app_id:
-        return {"ok": False, "error": "XFYUN_APP_ID is missing.", "code": None, "raw": None}
+        return {"ok": False, "error": "XFYUN_APP_ID 未配置。", "code": None, "raw": None}
 
     auth_header, auth_err = _build_authorization()
     if auth_err:
@@ -492,11 +490,11 @@ def upload_workflow_file(file_name: str, content: bytes, content_type: str = "ap
 
     base_url = os.getenv("XFYUN_BASE_URL", "https://xingchen-api.xf-yun.com").rstrip("/")
     endpoint = f"{base_url}/workflow/v1/upload_file"
-    timeout_seconds = float(os.getenv("XFYUN_TIMEOUT_SECONDS", "45"))
+    timeout_seconds = float(os.getenv("XFYUN_TIMEOUT_SECONDS", "25"))
 
     headers = {"Authorization": auth_header}
     try:
-        with httpx.Client(timeout=timeout_seconds, trust_env=False, http2=False) as client:
+        with httpx.Client(timeout=timeout_seconds) as client:
             resp = client.post(
                 endpoint,
                 headers=headers,

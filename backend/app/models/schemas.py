@@ -160,3 +160,34 @@ class FeedbackResponse(BaseModel):
 
 class StoreNameSuggestionsResponse(BaseModel):
     items: List[str]
+
+
+class StoreReviewItem(BaseModel):
+    id: int
+    rating: Optional[int] = None
+    comment: Optional[str] = None
+    recommendDish: Optional[str] = None
+    recommendReason: Optional[str] = None
+    createdAt: str
+    source: Optional[str] = None
+
+
+class StoreDetailData(BaseModel):
+    id: str
+    name: str
+    campus: str
+    area: Optional[str] = None
+    avgPrice: int
+    openHours: Optional[str] = None
+    categoryTags: List[str] = Field(default_factory=list)
+    tasteTags: List[str] = Field(default_factory=list)
+    sceneTags: List[str] = Field(default_factory=list)
+    reviews: List[StoreReviewItem] = Field(default_factory=list)
+    reviewCount: int = 0
+    avgRating: Optional[float] = None
+
+
+class StoreDetailResponse(BaseModel):
+    found: bool
+    store: Optional[StoreDetailData] = None
+    message: Optional[str] = None

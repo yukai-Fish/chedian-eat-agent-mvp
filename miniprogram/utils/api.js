@@ -1,12 +1,12 @@
 const { API_BASE_URL } = require("./config");
 
-function request({ url, method = "GET", data = undefined }) {
+function request({ url, method = "GET", data = undefined, timeout = 90000 }) {
   return new Promise((resolve, reject) => {
     wx.request({
       url: `${API_BASE_URL}${url}`,
       method,
       data,
-      timeout: 60000,
+      timeout,
       header: {
         "content-type": "application/json; charset=utf-8",
         Accept: "application/json; charset=utf-8",
@@ -41,8 +41,46 @@ function submitFeedback(payload) {
   });
 }
 
+function fetchStoreDetail(name) {
+  const keyword = String(name || "").trim();
+  if (!keyword) {
+    return Promise.resolve({ found: false, message: "name is required." });
+  }
+  const encoded = encodeURIComponent(keyword);
+  return request({
+    url: `/api/stores/detail?name=${encoded}`,
+    method: "GET",
+  }).catch((err) => {
+    const msg = err && err.message ? String(err.message) : "";
+    if (!msg.includes("HTTP 404")) throw err;
+    // Backward-compatible fallback for environments that only expose /api/v1/*
+    return request({
+      url: `/api/v1/stores/detail?name=${encoded}`,
+      method: "GET",
+    });
+  });
+}
+
+function fetchTodayRankings() {
+  return request({
+    url: "/api/v1/rankings/today",
+    method: "GET",
+  });
+}
+
+function logRankingClick(payload) {
+  return request({
+    url: "/api/v1/events/ranking-click",
+    method: "POST",
+    data: payload,
+  });
+}
+
 module.exports = {
   fetchRecommendations,
   submitFeedback,
+  fetchStoreDetail,
+  fetchTodayRankings,
+  logRankingClick,
   API_BASE_URL,
 };

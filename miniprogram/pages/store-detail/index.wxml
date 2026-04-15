@@ -1,0 +1,68 @@
+<view class="page">
+  <view wx:if="{{loading}}" class="state-card">Loading store detail...</view>
+
+  <view wx:if="{{!loading && error}}" class="state-card error">{{error}}</view>
+
+  <view wx:if="{{!loading && found && store}}" class="detail-card">
+    <view class="name">{{store.name}}</view>
+    <view class="meta">{{store.campus}} {{store.area ? (' - ' + store.area) : ''}}</view>
+    <view wx:if="{{openStatus}}" class="status-line">
+      <text class="status-badge status-{{openStatus.status}}">{{openStatus.label}}</text>
+      <text class="status-detail">{{openStatus.detail}}</text>
+    </view>
+
+    <view class="section">
+      <view class="label">Avg Price</view>
+      <view class="value">¥{{store.avgPrice}}</view>
+    </view>
+
+    <view class="section">
+      <view class="label">Open Hours</view>
+      <view class="value">{{store.openHours || "N/A"}}</view>
+    </view>
+
+    <view class="section">
+      <view class="label">Category Tags</view>
+      <view class="tags">
+        <text wx:for="{{store.categoryTags}}" wx:key="*this" class="tag">{{item}}</text>
+        <text wx:if="{{!store.categoryTags || store.categoryTags.length===0}}" class="value">N/A</text>
+      </view>
+    </view>
+
+    <view class="section">
+      <view class="label">Taste Tags</view>
+      <view class="tags">
+        <text wx:for="{{store.tasteTags}}" wx:key="*this" class="tag">{{item}}</text>
+        <text wx:if="{{!store.tasteTags || store.tasteTags.length===0}}" class="value">N/A</text>
+      </view>
+    </view>
+
+    <view class="section">
+      <view class="label">Scene Tags</view>
+      <view class="tags">
+        <text wx:for="{{store.sceneTags}}" wx:key="*this" class="tag">{{item}}</text>
+        <text wx:if="{{!store.sceneTags || store.sceneTags.length===0}}" class="value">N/A</text>
+      </view>
+    </view>
+
+    <view class="review-head">
+      <view class="review-title">Review Summary</view>
+      <view class="review-meta">
+        <text>Total {{store.reviewCount || 0}}</text>
+        <text wx:if="{{store.avgRating}}"> · Avg {{store.avgRating}}</text>
+      </view>
+    </view>
+
+    <view wx:if="{{!store.reviews || store.reviews.length===0}}" class="empty-review">No reviews yet.</view>
+
+    <view wx:for="{{store.reviews}}" wx:key="id" class="review-item">
+      <view class="review-top">
+        <text class="review-rating" wx:if="{{item.rating}}">Rating {{item.rating}}/5</text>
+        <text class="review-time">{{item.createdAt}}</text>
+      </view>
+      <view class="review-content" wx:if="{{item.comment}}">{{item.comment}}</view>
+      <view class="review-extra" wx:if="{{item.recommendDish}}">Dish: {{item.recommendDish}}</view>
+      <view class="review-extra" wx:if="{{item.recommendReason}}">Reason: {{item.recommendReason}}</view>
+    </view>
+  </view>
+</view>

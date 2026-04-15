@@ -1,3 +1,4 @@
+import re
 from typing import Dict, List, Tuple
 
 from app.core.scoring_config import load_scoring_config
@@ -6,7 +7,8 @@ from app.services.shop_repository import fetch_active_shops
 
 
 def _parse_hhmm_to_minutes(hhmm: str) -> int:
-    hour, minute = hhmm.split(":")
+    normalized = str(hhmm or "").strip().replace("：", ":")
+    hour, minute = normalized.split(":")
     return int(hour) * 60 + int(minute)
 
 
@@ -22,7 +24,18 @@ def _normalize_time_slot_ranges(config: Dict) -> Dict[str, Tuple[int, int]]:
 
 
 def _parse_open_hours(open_hours: str) -> Tuple[int, int]:
-    start_raw, end_raw = open_hours.split("-")
+    raw = str(open_hours or "").strip()
+    if not raw or raw in {"无", "全天"}:
+        raise ValueError("missing or all-day text")
+
+    # Tolerate mixed punctuation and multi-segment ranges, e.g.:
+    # 11：00-13：30，17：00-20：30
+    matches = re.findall(r"(\d{1,2}[:：]\d{1,2})", raw)
+    if len(matches) < 2:
+        start_raw, end_raw = raw.replace("：", ":").split("-", 1)
+    else:
+        start_raw, end_raw = matches[0], matches[1]
+
     start = _parse_hhmm_to_minutes(start_raw)
     end = _parse_hhmm_to_minutes(end_raw)
     if end <= start:
@@ -40,7 +53,11 @@ def _time_match_score(shop: Dict, slots: ParsedSlots, slot_ranges: Dict[str, Tup
     if not slots.time or slots.time not in slot_ranges or not shop.get("open_hours"):
         return 0.0
 
-    shop_range = _parse_open_hours(shop["open_hours"])
+    try:
+        shop_range = _parse_open_hours(shop["open_hours"])
+    except (ValueError, TypeError):
+        return 0.0
+
     query_range = slot_ranges[slots.time]
     query_length = query_range[1] - query_range[0]
     overlap = _overlap_minutes(shop_range, query_range)

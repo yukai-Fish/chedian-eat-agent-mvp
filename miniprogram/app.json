@@ -1,6 +1,7 @@
 {
   "pages": [
-    "pages/index/index"
+    "pages/index/index",
+    "pages/store-detail/index"
   ],
   "window": {
     "navigationBarTitleText": "成电吃什么",

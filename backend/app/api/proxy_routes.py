@@ -1,3 +1,4 @@
+import json
 import os
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
@@ -5,6 +6,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from app.models.schemas import (
     FeedbackRequest,
     FeedbackResponse,
+    StoreDetailResponse,
     StoreNameSuggestionsResponse,
     WorkflowRecommendRequest,
     WorkflowRecommendResponse,
@@ -12,7 +14,9 @@ from app.models.schemas import (
     WorkflowUploadFileResponse,
 )
 from app.services.feedback_repository import save_feedback, suggest_store_names
+from app.services.shop_repository import fetch_store_detail_by_name
 from app.services.spark_local_recommend_service import ask_spark_local_recommend
+from app.services.user_profile import build_iterative_profile
 from app.services.usage_events import log_query_event
 from app.services.xfyun_workflow_service import ask_workflow, resume_workflow, upload_workflow_file
 
@@ -24,6 +28,11 @@ proxy_router = APIRouter()
 def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendResponse:
     resolved_uid = req.uid or req.userId or req.anonymousId
     provider = os.getenv("RECOMMEND_PROVIDER", "workflow").strip().lower()
+    profile = build_iterative_profile(
+        uid=req.uid,
+        anonymous_id=req.anonymousId,
+        user_id=req.userId,
+    )
 
     log_query_event(
         req.query,
@@ -31,15 +40,24 @@ def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendRe
         anonymous_id=req.anonymousId,
         user_id=req.userId,
         source=f"{provider}-recommend",
+        meta={
+            "profile_applied": profile.get("hasProfile", False),
+            "profile_stats": profile.get("stats", {}),
+        },
     )
 
     if provider == "workflow":
+        merged_parameters = dict(req.parameters or {})
+        if profile.get("hasProfile"):
+            merged_parameters["AGENT_USER_PROFILE_SUMMARY"] = profile.get("summary")
+            merged_parameters["AGENT_USER_PROFILE_JSON"] = json.dumps(profile.get("signals", {}), ensure_ascii=False)
+
         result = ask_workflow(
             query=req.query,
             uid=resolved_uid,
             chat_id=req.chatId,
             stream=req.stream,
-            parameters=req.parameters,
+            parameters=merged_parameters,
             history=[item.model_dump() for item in req.history],
         )
         return WorkflowRecommendResponse(**result)
@@ -47,6 +65,7 @@ def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendRe
     result = ask_spark_local_recommend(
         query=req.query,
         uid=resolved_uid,
+        user_profile=profile if profile.get("hasProfile") else None,
     )
     return WorkflowRecommendResponse(**result)
 
@@ -80,6 +99,18 @@ def store_name_suggestions_proxy(keyword: str = "") -> StoreNameSuggestionsRespo
     if not keyword.strip():
         return StoreNameSuggestionsResponse(items=[])
     return StoreNameSuggestionsResponse(items=suggest_store_names(keyword=keyword.strip(), limit=8))
+
+
+@proxy_router.get("/stores/detail", response_model=StoreDetailResponse)
+def store_detail_proxy(name: str = "") -> StoreDetailResponse:
+    key = name.strip()
+    if not key:
+        raise HTTPException(status_code=400, detail="name is required.")
+
+    detail = fetch_store_detail_by_name(key)
+    if not detail:
+        return StoreDetailResponse(found=False, message="store detail not found.")
+    return StoreDetailResponse(found=True, store=detail)
 
 
 @proxy_router.post("/feedback", response_model=FeedbackResponse)

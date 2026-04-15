@@ -10,6 +10,33 @@
     <view class="summary">{{summary || "输入你的需求，获取校园美食推荐。"}}</view>
   </view>
 
+  <view class="ranking glass-card">
+    <view class="ranking-head">
+      <text class="ranking-title">今日热门榜</text>
+      <text class="ranking-meta" wx:if="{{rankingsUpdatedAt}}">更新：{{rankingsUpdatedAt}}</text>
+    </view>
+    <view wx:if="{{rankingsLoading}}" class="ranking-state">热度计算中...</view>
+    <view wx:if="{{!rankingsLoading && rankingsError}}" class="ranking-state ranking-error">
+      <text>{{rankingsError}}</text>
+      <text class="ranking-retry" bindtap="onRetryRankings">重试</text>
+    </view>
+    <view wx:if="{{!rankingsLoading && !rankingsError && rankings.length===0}}" class="ranking-state">今天还没有足够数据，快来贡献第一条点击。</view>
+    <block wx:for="{{rankings}}" wx:key="shop_id">
+      <view class="ranking-item" bindtap="onTapRankingItem" data-name="{{item.name}}" data-shop-id="{{item.shop_id}}">
+        <view class="ranking-left">
+          <text class="ranking-rank">#{{item.rank}}</text>
+          <view class="ranking-main">
+            <text class="ranking-name">{{item.name}}</text>
+            <text class="ranking-sub">{{item.campus}} · {{item.tag || "热门"}}</text>
+          </view>
+        </view>
+        <view class="ranking-right">
+          <text class="ranking-count">{{item.today_count || 0}}次</text>
+        </view>
+      </view>
+    </block>
+  </view>
+
   <view class="composer glass-card">
     <textarea
       class="query-input"
@@ -31,25 +58,70 @@
     <view wx:if="{{loading}}" class="loading-tip">正在生成推荐，通常需要 10-40 秒，请稍候…</view>
   </view>
 
+  <view class="memory glass-card" wx:if="{{queryHistory.length > 0 || favorites.length > 0}}">
+    <view wx:if="{{queryHistory.length > 0}}" class="memory-block">
+      <text class="memory-title">最近查询</text>
+      <view class="memory-row">
+        <block wx:for="{{queryHistory}}" wx:key="*this">
+          <view class="memory-chip" data-query="{{item}}" bindtap="onTapHistoryQuery">{{item}}</view>
+        </block>
+      </view>
+    </view>
+    <view wx:if="{{favorites.length > 0}}" class="memory-block">
+      <text class="memory-title">我的收藏</text>
+      <view class="memory-row">
+        <block wx:for="{{favorites}}" wx:key="*this">
+          <view class="memory-chip memory-fav-chip" data-name="{{item}}" bindtap="onTapFavoriteItem">{{item}}</view>
+        </block>
+      </view>
+    </view>
+  </view>
+
   <view wx:if="{{error}}" class="error glass-card">{{error}}</view>
 
   <view class="result glass-card">
     <view class="result-head">
       <text class="result-title">推荐结果</text>
+    </view>
+    <view class="result-actions result-actions-wrap">
+      <button class="ghost-btn batch-btn {{onlyOpenNow?'open-only-active':''}}" bindtap="onToggleOnlyOpenNow">只看营业中</button>
+      <button class="ghost-btn batch-btn" bindtap="onRefineTaste">换口味</button>
       <button wx:if="{{canSwitchBatch}}" class="ghost-btn batch-btn" bindtap="onSwitchBatch">换一批</button>
+    </view>
+    <view wx:if="{{dislikedNames.length > 0}}" class="excluded-wrap">
+      <text class="excluded-label">已排除：</text>
+      <text class="excluded-list">{{dislikedNames.join("、")}}</text>
+      <text class="excluded-clear" bindtap="onClearDisliked">清除</text>
+    </view>
+    <view wx:if="{{cards.length > 0}}" class="followup-wrap">
+      <text class="followup-title">一键二次追问</text>
+      <view class="followup-row">
+        <block wx:for="{{followUps}}" wx:key="key">
+          <view class="followup-chip" data-key="{{item.key}}" bindtap="onTapFollowUp">{{item.label}}</view>
+        </block>
+      </view>
     </view>
 
     <view wx:if="{{visibleCards.length === 0}}" class="empty">
       <text>暂无结构化推荐结果。</text>
+      <text wx:if="{{onlyOpenNow}}">当前推荐里暂时没有“营业中”店铺，可关闭筛选或换一批。</text>
       <text wx:if="{{rawAnswer}}" class="raw-title">模型原始回答：</text>
       <text wx:if="{{rawAnswer}}" class="raw-text">{{rawAnswer}}</text>
     </view>
 
     <block wx:for="{{visibleCards}}" wx:key="name">
-      <view class="card">
+      <view class="card card-tap" bindtap="onOpenStoreDetail" data-name="{{item.name}}">
         <view class="card-head">
           <text class="card-name">{{item.name}}</text>
           <text wx:if="{{item.scoreLabel}}" class="score">{{item.scoreLabel}}</text>
+        </view>
+        <view class="detail-row">
+          <view class="detail-entry">查看详情 ></view>
+          <view class="card-actions-right">
+            <view class="fav-btn" catchtap="onToggleFavorite" data-name="{{item.name}}">{{favorites.includes(item.name) ? "已收藏" : "收藏"}}</view>
+            <view class="ate-btn" catchtap="openQuickDining" data-name="{{item.name}}">吃过了</view>
+            <view class="dislike-btn" catchtap="onDislikeCard" data-name="{{item.name}}">不喜欢</view>
+          </view>
         </view>
 
         <view wx:if="{{item.reason}}" class="field">
@@ -70,6 +142,25 @@
         </view>
       </view>
     </block>
+  </view>
+
+  <view wx:if="{{quickDiningOpen}}" class="mask" bindtap="closeQuickDining">
+    <view class="modal quick-modal glass-card" bindtap="stopTap">
+      <view class="modal-head">
+        <text class="modal-title">吃后反馈</text>
+        <text class="close" bindtap="closeQuickDining">✕</text>
+      </view>
+      <view class="quick-store">店名：{{quickDiningForm.storeName}}</view>
+      <view class="form-row">
+        <text class="form-label">评分</text>
+        <slider min="1" max="5" step="1" show-value value="{{quickDiningForm.rating}}" bindchange="onQuickDiningRatingChange" />
+      </view>
+      <view class="form-row">
+        <text class="form-label">一句评价</text>
+        <textarea class="form-textarea quick-comment" value="{{quickDiningForm.comment}}" maxlength="120" bindinput="onQuickDiningCommentInput" placeholder="例如：出餐快，适合一个人，口味偏辣" />
+      </view>
+      <button class="gold-btn submit-feedback-btn" loading="{{quickDiningLoading}}" bindtap="onSubmitQuickDining">提交</button>
+    </view>
   </view>
 
   <view wx:if="{{feedbackOpen}}" class="mask" bindtap="onTapFeedbackMask">

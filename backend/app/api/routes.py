@@ -14,13 +14,14 @@ from app.models.schemas import (
     RecommendRequest,
     RecommendResponse,
     StoreNameSuggestionsResponse,
+    StoreDetailResponse,
 )
 from app.services.favorites_repository import add_favorite, list_favorites, remove_favorite
 from app.services.feedback_repository import save_feedback, suggest_store_names
 from app.services.hot_ranking import get_today_hot_rankings
 from app.services.parser import parse_query
 from app.services.recommender import recommend
-from app.services.shop_repository import count_shops
+from app.services.shop_repository import count_shops, fetch_store_detail_by_name
 from app.services.usage_events import log_query_event, log_ranking_click_event
 
 
@@ -97,6 +98,18 @@ def store_name_suggestions(keyword: str = "") -> StoreNameSuggestionsResponse:
     if not keyword.strip():
         return StoreNameSuggestionsResponse(items=[])
     return StoreNameSuggestionsResponse(items=suggest_store_names(keyword=keyword.strip(), limit=8))
+
+
+@router.get("/stores/detail", response_model=StoreDetailResponse)
+def store_detail(name: str = "") -> StoreDetailResponse:
+    key = name.strip()
+    if not key:
+        raise HTTPException(status_code=400, detail="name is required.")
+
+    detail = fetch_store_detail_by_name(key)
+    if not detail:
+        return StoreDetailResponse(found=False, message="未找到该商家详情，请尝试其他候选店名。")
+    return StoreDetailResponse(found=True, store=detail)
 
 
 @router.post("/feedback", response_model=FeedbackResponse)

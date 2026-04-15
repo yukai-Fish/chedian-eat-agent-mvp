@@ -1,10 +1,12 @@
 import csv
+import difflib
 import hashlib
 import os
+import re
 import sqlite3
 from pathlib import Path
 from threading import Lock
-from typing import Dict, List
+from typing import Any, Dict, List, Optional
 
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -14,6 +16,105 @@ SEED_CSV_PATH = BASE_DIR / "data" / "shops_mock.csv"
 
 _init_lock = Lock()
 _initialized = False
+
+TEST_SEED_SHOPS = [
+    {
+        "id": "s001",
+        "name": "韩式拌饭屋",
+        "campus": "清水河",
+        "area": "校内",
+        "avg_price": 30,
+        "open_hours": "10:00-22:00",
+        "tastes": "辣|清淡",
+        "scenes": "同学聚餐|一个人",
+        "tags": "韩式|拌饭",
+        "is_open": 1,
+    },
+    {
+        "id": "s002",
+        "name": "粤式烧腊饭",
+        "campus": "清水河",
+        "area": "西门",
+        "avg_price": 30,
+        "open_hours": "10:30-21:00",
+        "tastes": "清淡",
+        "scenes": "一个人|同学聚餐",
+        "tags": "粤式|烧腊",
+        "is_open": 1,
+    },
+    {
+        "id": "s003",
+        "name": "川味小馆",
+        "campus": "清水河",
+        "area": "南门",
+        "avg_price": 30,
+        "open_hours": "11：00-23：00",
+        "tastes": "辣",
+        "scenes": "同学聚餐",
+        "tags": "川菜|家常菜",
+        "is_open": 1,
+    },
+    {
+        "id": "s004",
+        "name": "番茄牛腩粉",
+        "campus": "沙河",
+        "area": "校内",
+        "avg_price": 20,
+        "open_hours": "10:30-21:00",
+        "tastes": "清淡",
+        "scenes": "一个人",
+        "tags": "粉面|清淡",
+        "is_open": 1,
+    },
+    {
+        "id": "s005",
+        "name": "深夜小串",
+        "campus": "清水河",
+        "area": "西门",
+        "avg_price": 40,
+        "open_hours": "18:00-03:00",
+        "tastes": "辣",
+        "scenes": "同学聚餐",
+        "tags": "烧烤|夜宵",
+        "is_open": 1,
+    },
+    {
+        "id": "s006",
+        "name": "北方面馆",
+        "campus": "清水河",
+        "area": "南门",
+        "avg_price": 18,
+        "open_hours": "07:00-21:00",
+        "tastes": "清淡|辣",
+        "scenes": "一个人|同学聚餐",
+        "tags": "面馆|北方",
+        "is_open": 1,
+    },
+    {
+        "id": "s007",
+        "name": "清真牛肉面",
+        "campus": "清水河",
+        "area": "西门",
+        "avg_price": 28,
+        "open_hours": "09:00-22:00",
+        "tastes": "清淡",
+        "scenes": "一个人|同学聚餐",
+        "tags": "清真|面馆",
+        "is_open": 1,
+    },
+    {
+        "id": "s008",
+        "name": "轻食能量碗",
+        "campus": "沙河",
+        "area": "校内",
+        "avg_price": 26,
+        "open_hours": "10:00-20:00",
+        "tastes": "清淡",
+        "scenes": "一个人",
+        "tags": "轻食|健康餐",
+        "is_open": 1,
+    },
+]
 
 
 def _connect() -> sqlite3.Connection:
@@ -76,6 +177,35 @@ def _meta_set(conn: sqlite3.Connection, key: str, value: str) -> None:
 
 
 def _seed_from_csv_if_needed(conn: sqlite3.Connection) -> None:
+    # Keep tests deterministic regardless of external CSV churn.
+    if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("CHEDIAN_USE_TEST_SEED") == "1":
+        conn.execute("DELETE FROM shops")
+        conn.executemany(
+            """
+            INSERT INTO shops (
+                id, name, campus, area, avg_price, open_hours, tastes, scenes, tags, is_open
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    item["id"],
+                    item["name"],
+                    item["campus"],
+                    item["area"],
+                    int(item["avg_price"]),
+                    item["open_hours"],
+                    item["tastes"],
+                    item["scenes"],
+                    item["tags"],
+                    int(item["is_open"]),
+                )
+                for item in TEST_SEED_SHOPS
+            ],
+        )
+        _meta_set(conn, "shops_seed_signature", "test-seed-v1")
+        _meta_set(conn, "shops_seed_count", str(len(TEST_SEED_SHOPS)))
+        return
+
     with open(SEED_CSV_PATH, "r", encoding="utf-8-sig") as f:
         records = list(csv.DictReader(f))
 
@@ -84,9 +214,6 @@ def _seed_from_csv_if_needed(conn: sqlite3.Connection) -> None:
     row = conn.execute("SELECT COUNT(1) AS cnt FROM shops").fetchone()
     current_count = int(row["cnt"]) if row else 0
 
-    # Refresh when:
-    # 1) shops is empty; or
-    # 2) seed file changed since last sync.
     if current_count > 0 and current_signature == desired_signature:
         return
 
@@ -152,3 +279,142 @@ def count_shops() -> int:
     with _connect() as conn:
         row = conn.execute("SELECT COUNT(1) AS cnt FROM shops WHERE is_open = 1").fetchone()
     return int(row["cnt"]) if row else 0
+
+
+def _split_tag_text(text: str) -> List[str]:
+    return [item.strip() for item in re.split(r"[|,;/]+", text or "") if item.strip()]
+
+
+def _normalize_store_name(name: str) -> str:
+    text = (name or "").strip()
+    if not text:
+        return ""
+    # Remove bracketed area notes, punctuation, and common suffix words.
+    text = re.sub(r"[\(（【\[].*?[\)）】\]]", "", text)
+    text = re.sub(r"[\s·•\-_/]+", "", text)
+    text = re.sub(r"(餐厅|饭店|店|食堂|美食城)$", "", text)
+    return text
+
+
+def _name_similarity(query: str, candidate: str) -> float:
+    q = _normalize_store_name(query)
+    c = _normalize_store_name(candidate)
+    if not q or not c:
+        return 0.0
+    if q == c:
+        return 1.0
+
+    ratio = difflib.SequenceMatcher(None, q, c).ratio()
+    qset = set(q)
+    cset = set(c)
+    overlap = len(qset & cset) / max(1, len(qset | cset))
+    contain_bonus = 0.12 if (q in c or c in q) else 0.0
+    prefix_bonus = 0.08 if (c.startswith(q) or q.startswith(c)) else 0.0
+    return min(1.0, 0.62 * ratio + 0.30 * overlap + contain_bonus + prefix_bonus)
+
+
+def _fuzzy_find_store_row(conn: sqlite3.Connection, store_name: str) -> Optional[sqlite3.Row]:
+    rows = conn.execute(
+        """
+        SELECT id, name, campus, area, avg_price, open_hours, tastes, scenes, tags
+        FROM shops
+        WHERE is_open = 1
+        """
+    ).fetchall()
+    if not rows:
+        return None
+
+    scored = sorted(
+        ((float(_name_similarity(store_name, str(row["name"] or ""))), row) for row in rows),
+        key=lambda x: x[0],
+        reverse=True,
+    )
+    best_score, best_row = scored[0]
+    # Conservative threshold to avoid clearly wrong jumps.
+    return best_row if best_score >= 0.60 else None
+
+
+def _fetch_store_row(conn: sqlite3.Connection, store_name: str) -> Optional[sqlite3.Row]:
+    exact = conn.execute(
+        """
+        SELECT id, name, campus, area, avg_price, open_hours, tastes, scenes, tags
+        FROM shops
+        WHERE is_open = 1 AND name = ?
+        LIMIT 1
+        """,
+        (store_name,),
+    ).fetchone()
+    if exact:
+        return exact
+
+    like_row = conn.execute(
+        """
+        SELECT id, name, campus, area, avg_price, open_hours, tastes, scenes, tags
+        FROM shops
+        WHERE is_open = 1 AND name LIKE ?
+        ORDER BY CASE WHEN name LIKE ? THEN 0 ELSE 1 END, avg_price ASC
+        LIMIT 1
+        """,
+        (f"%{store_name}%", f"{store_name}%"),
+    ).fetchone()
+    if like_row:
+        return like_row
+
+    return _fuzzy_find_store_row(conn, store_name)
+
+
+def fetch_store_detail_by_name(store_name: str) -> Optional[Dict[str, Any]]:
+    ensure_database()
+    key = (store_name or "").strip()
+    if not key:
+        return None
+
+    with _connect() as conn:
+        shop_row = _fetch_store_row(conn, key)
+        if not shop_row:
+            return None
+
+        review_rows = conn.execute(
+            """
+            SELECT id, rating, comment, recommend_dish, recommend_reason, source, created_at
+            FROM feedback_submissions
+            WHERE store_name = ?
+               OR store_name LIKE ?
+            ORDER BY datetime(created_at) DESC, id DESC
+            LIMIT 20
+            """,
+            (shop_row["name"], f"%{shop_row['name']}%"),
+        ).fetchall()
+
+    reviews: List[Dict[str, Any]] = []
+    ratings: List[int] = []
+    for row in review_rows:
+        rating = row["rating"] if row["rating"] is not None else None
+        if isinstance(rating, int):
+            ratings.append(rating)
+        reviews.append(
+            {
+                "id": int(row["id"]),
+                "rating": rating,
+                "comment": row["comment"],
+                "recommendDish": row["recommend_dish"],
+                "recommendReason": row["recommend_reason"],
+                "createdAt": str(row["created_at"]),
+                "source": row["source"],
+            }
+        )
+
+    return {
+        "id": str(shop_row["id"]),
+        "name": str(shop_row["name"]),
+        "campus": str(shop_row["campus"]),
+        "area": str(shop_row["area"] or ""),
+        "avgPrice": int(shop_row["avg_price"] or 0),
+        "openHours": str(shop_row["open_hours"] or ""),
+        "categoryTags": _split_tag_text(str(shop_row["tags"] or "")),
+        "tasteTags": _split_tag_text(str(shop_row["tastes"] or "")),
+        "sceneTags": _split_tag_text(str(shop_row["scenes"] or "")),
+        "reviews": reviews,
+        "reviewCount": len(reviews),
+        "avgRating": round(sum(ratings) / len(ratings), 2) if ratings else None,
+    }
