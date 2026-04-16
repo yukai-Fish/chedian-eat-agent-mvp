@@ -38,6 +38,14 @@ class HistoryMessage(BaseModel):
     content: str
 
 
+class UserLocationHint(BaseModel):
+    latitude: float = Field(..., ge=-90, le=90)
+    longitude: float = Field(..., ge=-180, le=180)
+    campus: Optional[str] = Field(default=None, max_length=40)
+    areaHint: Optional[str] = Field(default=None, max_length=40)
+    accuracy: Optional[float] = Field(default=None, ge=0)
+
+
 class WorkflowRecommendRequest(BaseModel):
     query: str = Field(..., min_length=1, description="user query")
     uid: Optional[str] = None
@@ -45,6 +53,8 @@ class WorkflowRecommendRequest(BaseModel):
     userId: Optional[str] = None
     chatId: Optional[str] = None
     stream: Optional[bool] = None
+    preferNearby: bool = False
+    location: Optional[UserLocationHint] = None
     parameters: Optional[dict] = None
     excludeStoreNames: List[str] = Field(default_factory=list, max_length=20)
     history: List[HistoryMessage] = Field(default_factory=list)

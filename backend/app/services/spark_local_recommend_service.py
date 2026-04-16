@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
@@ -12,6 +13,25 @@ from app.services.shop_repository import fetch_active_shops
 
 
 _UNAVAILABLE_ENDPOINTS: set[str] = set()
+
+_CAMPUS_CENTERS: Dict[str, Tuple[float, float]] = {
+    "清水河": (30.7522, 103.9349),
+    "沙河": (30.6742, 104.1003),
+}
+
+_AREA_OFFSETS: Dict[str, Tuple[float, float]] = {
+    "校内": (0.0, 0.0),
+    "西门": (0.0, -0.0090),
+    "南门": (-0.0070, 0.0),
+    "北门": (0.0070, 0.0),
+    "东门": (0.0, 0.0090),
+}
+
+_REGIONAL_CENTERS: Dict[str, Tuple[float, float]] = {
+    "温江": (30.6936, 103.8438),
+    "红光": (30.7742, 103.8877),
+    "市区": (30.6598, 104.0633),
+}
 
 
 def _build_auth_header() -> Tuple[Optional[str], Optional[str]]:
@@ -39,6 +59,50 @@ def _headers() -> Dict[str, str]:
     }
 
 
+def _to_float(value: Any) -> Optional[float]:
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(num):
+        return None
+    return num
+
+
+def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    radius_km = 6371.0088
+    lat1_rad = math.radians(lat1)
+    lat2_rad = math.radians(lat2)
+    dlat = lat2_rad - lat1_rad
+    dlng = math.radians(lng2 - lng1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlng / 2) ** 2
+    return 2 * radius_km * math.asin(min(1.0, math.sqrt(a)))
+
+
+def _normalize_area(text: Any) -> str:
+    value = str(text or "").strip()
+    if not value:
+        return ""
+    return re.sub(r"[\s·•\-_()/（）【】\[\],，]+", "", value)
+
+
+def _shop_anchor_point(shop: Dict[str, Any]) -> Optional[Tuple[float, float]]:
+    campus_text = str(shop.get("campus", "")).strip()
+    area_text = _normalize_area(shop.get("area", ""))
+
+    for key, center in _CAMPUS_CENTERS.items():
+        if key in campus_text:
+            for area_key, offset in _AREA_OFFSETS.items():
+                if area_key in area_text:
+                    return center[0] + offset[0], center[1] + offset[1]
+            return center
+
+    for key, center in _REGIONAL_CENTERS.items():
+        if key in campus_text or key in area_text:
+            return center
+    return None
+
+
 def _normalize_name(value: Any) -> str:
     text = str(value or "").strip().lower()
     if not text:
@@ -56,7 +120,12 @@ def _is_excluded(name: str, excluded_names: set[str]) -> bool:
     return any(normalized in blocked or blocked in normalized for blocked in excluded_names)
 
 
-def _candidate_shops(query: str, limit: int = 30, excluded_names: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+def _candidate_shops(
+    query: str,
+    limit: int = 30,
+    excluded_names: Optional[List[str]] = None,
+    nearby_context: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
     slots = parse_query(query)
     shops = fetch_active_shops()
     excluded = {
@@ -64,6 +133,14 @@ def _candidate_shops(query: str, limit: int = 30, excluded_names: Optional[List[
         for name in (excluded_names or [])
         if _normalize_name(name)
     }
+    nearby_preferred = bool((nearby_context or {}).get("preferNearby"))
+    user_lat = _to_float((nearby_context or {}).get("latitude"))
+    user_lng = _to_float((nearby_context or {}).get("longitude"))
+    if user_lat is None or user_lng is None or user_lat < -90 or user_lat > 90 or user_lng < -180 or user_lng > 180:
+        user_lat = None
+        user_lng = None
+    campus_hint = str((nearby_context or {}).get("campus") or "").strip()
+    area_hint = str((nearby_context or {}).get("areaHint") or "").strip()
 
     campus = (slots.location or "").strip()
     budget = slots.budget_max
@@ -71,7 +148,7 @@ def _candidate_shops(query: str, limit: int = 30, excluded_names: Optional[List[
     scene = (slots.scene or "").strip()
     time_hint = (slots.time or "").strip()
 
-    scored: List[Tuple[float, Dict[str, Any]]] = []
+    scored: List[Tuple[float, float, Dict[str, Any], Optional[float]]] = []
     for item in shops:
         if _is_excluded(str(item.get("name", "")), excluded):
             continue
@@ -94,10 +171,34 @@ def _candidate_shops(query: str, limit: int = 30, excluded_names: Optional[List[
         if time_hint and time_hint in str(item.get("open_hours", "")):
             score += 0.6
 
-        scored.append((score, item))
+        distance_km: Optional[float] = None
+        if user_lat is not None and user_lng is not None:
+            anchor = _shop_anchor_point(item)
+            if anchor:
+                distance_km = _haversine_km(user_lat, user_lng, anchor[0], anchor[1])
 
-    scored.sort(key=lambda x: (-x[0], int(x[1].get("avg_price", 0) or 0), str(x[1].get("id", ""))))
-    selected = [row for _, row in scored[:limit]]
+        if nearby_preferred:
+            shop_campus = str(item.get("campus", ""))
+            shop_area = str(item.get("area", ""))
+            if campus_hint:
+                if campus_hint in shop_campus:
+                    score += 2.2
+                else:
+                    score -= 0.9
+            if area_hint and area_hint in shop_area:
+                score += 0.7
+            if distance_km is not None:
+                # Encourage options that are likely walkable right now.
+                score += max(0.0, 1.6 - min(distance_km, 8.0) * 0.28)
+
+        distance_sort = float(distance_km) if distance_km is not None else 999.0
+        scored.append((score, distance_sort, item, distance_km))
+
+    if nearby_preferred:
+        scored.sort(key=lambda x: (-x[0], x[1], int(x[2].get("avg_price", 0) or 0), str(x[2].get("id", ""))))
+    else:
+        scored.sort(key=lambda x: (-x[0], int(x[2].get("avg_price", 0) or 0), str(x[2].get("id", ""))))
+    selected = [(row, distance_km) for _, _, row, distance_km in scored[:limit]]
 
     return [
         {
@@ -110,8 +211,9 @@ def _candidate_shops(query: str, limit: int = 30, excluded_names: Optional[List[
             "tastes": str(row.get("tastes", "")),
             "scenes": str(row.get("scenes", "")),
             "tags": str(row.get("tags", "")),
+            "distance_km": round(float(distance_km), 2) if distance_km is not None else None,
         }
-        for row in selected
+        for row, distance_km in selected
     ]
 
 
@@ -214,6 +316,7 @@ def ask_spark_local_recommend(
     uid: Optional[str] = None,
     user_profile: Optional[Dict[str, Any]] = None,
     exclude_store_names: Optional[List[str]] = None,
+    nearby_context: Optional[Dict[str, Any]] = None,
     timeout_seconds: Optional[float] = None,
 ) -> Dict[str, Any]:
     auth, auth_err = _build_auth_header()
@@ -228,7 +331,12 @@ def ask_spark_local_recommend(
     if thinking_mode not in {"enabled", "disabled", "auto"}:
         thinking_mode = "disabled"
 
-    shops = _candidate_shops(query, limit=30, excluded_names=exclude_store_names)
+    shops = _candidate_shops(
+        query,
+        limit=30,
+        excluded_names=exclude_store_names,
+        nearby_context=nearby_context,
+    )
     payload = {
         "model": model,
         "messages": _messages(query, shops, user_profile),
@@ -327,6 +435,7 @@ def ask_spark_local_recommend(
             "model": model,
             "profile_summary": str((user_profile or {}).get("summary") or ""),
             "excluded_store_names": exclude_store_names or [],
+            "nearby_context": nearby_context or {},
             "upstream": parsed,
         },
     }

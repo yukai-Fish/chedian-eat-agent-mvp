@@ -10,6 +10,11 @@
     "backgroundColor": "#f7f2e6",
     "backgroundTextStyle": "light"
   },
+  "permission": {
+    "scope.userLocation": {
+      "desc": "用于优先推荐你附近可步行到达的店铺"
+    }
+  },
   "style": "v2",
   "sitemapLocation": "sitemap.json"
 }

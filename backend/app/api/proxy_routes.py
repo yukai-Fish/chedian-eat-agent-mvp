@@ -29,6 +29,16 @@ def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendRe
     resolved_uid = req.uid or req.userId or req.anonymousId
     provider = os.getenv("RECOMMEND_PROVIDER", "workflow").strip().lower()
     excluded_names = [str(name).strip() for name in (req.excludeStoreNames or []) if str(name).strip()][:20]
+    nearby_context = None
+    if req.preferNearby and req.location is not None:
+        nearby_context = {
+            "preferNearby": True,
+            "latitude": req.location.latitude,
+            "longitude": req.location.longitude,
+            "campus": (req.location.campus or "").strip() or None,
+            "areaHint": (req.location.areaHint or "").strip() or None,
+            "accuracy": req.location.accuracy,
+        }
     profile = build_iterative_profile(
         uid=req.uid,
         anonymous_id=req.anonymousId,
@@ -54,6 +64,9 @@ def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendRe
             merged_parameters["AGENT_USER_PROFILE_JSON"] = json.dumps(profile.get("signals", {}), ensure_ascii=False)
         if excluded_names:
             merged_parameters["AGENT_EXCLUDED_STORE_NAMES"] = json.dumps(excluded_names, ensure_ascii=False)
+        if nearby_context:
+            merged_parameters["AGENT_NEARBY_FIRST"] = "true"
+            merged_parameters["AGENT_USER_LOCATION_JSON"] = json.dumps(nearby_context, ensure_ascii=False)
 
         result = ask_workflow(
             query=req.query,
@@ -70,6 +83,7 @@ def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendRe
         uid=resolved_uid,
         user_profile=profile if profile.get("hasProfile") else None,
         exclude_store_names=excluded_names,
+        nearby_context=nearby_context,
     )
     return WorkflowRecommendResponse(**result)
 

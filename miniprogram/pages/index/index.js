@@ -16,6 +16,22 @@ const FOLLOW_UP_PRESETS = [
 ];
 const MAX_HISTORY = 8;
 const MAX_FAVORITES = 50;
+const CAMPUS_CENTERS = {
+  清水河: { latitude: 30.7522, longitude: 103.9349 },
+  沙河: { latitude: 30.6742, longitude: 104.1003 },
+};
+const CAMPUS_AREA_ANCHORS = {
+  清水河: [
+    { areaHint: "校内", latitude: 30.7522, longitude: 103.9349 },
+    { areaHint: "西门", latitude: 30.7522, longitude: 103.9259 },
+    { areaHint: "南门", latitude: 30.7452, longitude: 103.9349 },
+  ],
+  沙河: [
+    { areaHint: "校内", latitude: 30.6742, longitude: 104.1003 },
+    { areaHint: "西门", latitude: 30.6742, longitude: 104.0945 },
+    { areaHint: "南门", latitude: 30.6697, longitude: 104.1003 },
+  ],
+};
 
 function getVisibleCards(cards, batchSize, batchIndex) {
   if (!Array.isArray(cards) || cards.length === 0) return [];
@@ -57,6 +73,57 @@ function mergeDislikedNames(...nameLists) {
     });
   });
   return merged.slice(-MAX_DISLIKED);
+}
+
+function toRadians(deg) {
+  return (Number(deg) * Math.PI) / 180;
+}
+
+function distanceKm(lat1, lng1, lat2, lng2) {
+  const r = 6371.0088;
+  const dLat = toRadians(lat2 - lat1);
+  const dLng = toRadians(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * r * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+function inferCampusContext(latitude, longitude) {
+  let bestCampus = "";
+  let bestCampusDistance = Number.POSITIVE_INFINITY;
+  Object.keys(CAMPUS_CENTERS).forEach((campus) => {
+    const point = CAMPUS_CENTERS[campus];
+    const km = distanceKm(latitude, longitude, point.latitude, point.longitude);
+    if (km < bestCampusDistance) {
+      bestCampus = campus;
+      bestCampusDistance = km;
+    }
+  });
+
+  if (!bestCampus) return null;
+
+  const anchors = CAMPUS_AREA_ANCHORS[bestCampus] || [];
+  let bestArea = "校内";
+  let bestAreaDistance = Number.POSITIVE_INFINITY;
+  anchors.forEach((anchor) => {
+    const km = distanceKm(latitude, longitude, anchor.latitude, anchor.longitude);
+    if (km < bestAreaDistance) {
+      bestArea = anchor.areaHint;
+      bestAreaDistance = km;
+    }
+  });
+
+  return {
+    campus: bestCampus,
+    campusDistanceKm: Number(bestCampusDistance.toFixed(2)),
+    areaHint: bestArea,
+    areaDistanceKm: Number.isFinite(bestAreaDistance) ? Number(bestAreaDistance.toFixed(2)) : null,
+  };
+}
+
+function buildNearbyHintText(locationContext) {
+  if (!locationContext || !locationContext.campus) return "";
+  const areaText = locationContext.areaHint ? `${locationContext.areaHint}附近` : "";
+  return `我当前在${locationContext.campus}${areaText}，优先同校区、步行更近且当下可去的店。`;
 }
 
 function parseIntervals(openHoursText) {
@@ -117,6 +184,11 @@ Page({
     followUps: FOLLOW_UP_PRESETS,
     rawAnswer: "",
     quickPrompts: QUICK_PROMPTS,
+    preferNearby: false,
+    locationLoading: false,
+    locationError: "",
+    locationLabel: "未定位",
+    locationContext: null,
     rankingsLoading: false,
     rankingsError: "",
     rankingsUpdatedAt: "",
@@ -214,6 +286,75 @@ Page({
     this.loadTodayRankings();
   },
 
+  formatLocationLabel(locationContext) {
+    if (!locationContext || !locationContext.campus) return "未定位";
+    const areaText = locationContext.areaHint ? `${locationContext.areaHint}附近` : "附近";
+    return `${locationContext.campus}${areaText}`;
+  },
+
+  async ensureLocationContext(forceRefresh = false) {
+    if (!forceRefresh && this.data.locationContext) return this.data.locationContext;
+    if (this.data.locationLoading) return null;
+
+    this.setData({ locationLoading: true, locationError: "" });
+    return new Promise((resolve) => {
+      wx.getLocation({
+        type: "gcj02",
+        isHighAccuracy: true,
+        success: (res) => {
+          const latitude = Number(res.latitude);
+          const longitude = Number(res.longitude);
+          if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+            this.setData({
+              locationLoading: false,
+              locationError: "定位结果异常，请重试。",
+            });
+            resolve(null);
+            return;
+          }
+
+          const inferred = inferCampusContext(latitude, longitude) || {};
+          const nextContext = {
+            latitude,
+            longitude,
+            accuracy: Number(res.accuracy) || null,
+            campus: inferred.campus || "",
+            areaHint: inferred.areaHint || "",
+            campusDistanceKm: inferred.campusDistanceKm || null,
+            areaDistanceKm: inferred.areaDistanceKm || null,
+          };
+          this.setData({
+            locationLoading: false,
+            locationError: "",
+            locationContext: nextContext,
+            locationLabel: this.formatLocationLabel(nextContext),
+          });
+          resolve(nextContext);
+        },
+        fail: (err) => {
+          const msg = String((err && err.errMsg) || "");
+          const denied = msg.includes("auth deny") || msg.includes("auth denied");
+          this.setData({
+            locationLoading: false,
+            locationError: denied ? "定位权限未开启，请在设置中允许定位。" : "定位失败，请稍后重试。",
+          });
+          if (denied) {
+            wx.showModal({
+              title: "需要定位权限",
+              content: "开启后可优先推荐你附近可步行到达的店铺。",
+              confirmText: "去设置",
+              success: (modalRes) => {
+                if (!modalRes.confirm) return;
+                wx.openSetting({});
+              },
+            });
+          }
+          resolve(null);
+        },
+      });
+    });
+  },
+
   getStorageKeys() {
     const anon = this.identity && this.identity.anonymousId ? this.identity.anonymousId : "anonymous";
     return {
@@ -301,7 +442,11 @@ Page({
     }
 
     const dislikedNames = Array.isArray(options.dislikedNames) ? options.dislikedNames : (this.data.dislikedNames || []);
-    const requestQuery = forceRefine ? buildRefinedQuery(cleanQuery, dislikedNames) : cleanQuery;
+    const nearbyEnabled = !!this.data.preferNearby;
+    const locationContext = nearbyEnabled ? (this.data.locationContext || null) : null;
+    const baseQuery = forceRefine ? buildRefinedQuery(cleanQuery, dislikedNames) : cleanQuery;
+    const nearbyHint = nearbyEnabled ? buildNearbyHintText(locationContext) : "";
+    const requestQuery = nearbyHint ? `${baseQuery}。${nearbyHint}` : baseQuery;
 
     this.setData({
       loading: true,
@@ -314,6 +459,16 @@ Page({
         anonymousId: this.identity.anonymousId,
         userId: this.identity.userId || undefined,
         uid: this.identity.uid,
+        preferNearby: nearbyEnabled && !!locationContext,
+        location: locationContext
+          ? {
+            latitude: locationContext.latitude,
+            longitude: locationContext.longitude,
+            campus: locationContext.campus,
+            areaHint: locationContext.areaHint,
+            accuracy: locationContext.accuracy,
+          }
+          : undefined,
         excludeStoreNames: dislikedNames,
         history: [],
       });
@@ -334,7 +489,9 @@ Page({
       const parsed = parseRecommendationAnswer(result.answer || "");
       const rawCards = parsed.cards || [];
       const cards = filterDisliked(rawCards, dislikedNames);
-      const summarySuffix = forceRefine ? "（已按你的反馈换口味）" : "";
+      let summarySuffix = "";
+      if (forceRefine) summarySuffix += "（已按你的反馈换口味）";
+      if (nearbyEnabled && locationContext) summarySuffix += "（已启用附近优先）";
 
       this.setData({
         loading: false,
@@ -365,6 +522,24 @@ Page({
   onTapQuickPrompt(e) {
     const text = e.currentTarget.dataset.prompt || "";
     this.setData({ query: text });
+  },
+
+  async onTogglePreferNearby() {
+    if (this.data.loading || this.data.locationLoading) return;
+    if (this.data.preferNearby) {
+      this.setData({ preferNearby: false, locationError: "" });
+      wx.showToast({ title: "已关闭附近优先", icon: "none" });
+      return;
+    }
+
+    const context = await this.ensureLocationContext();
+    if (!context) return;
+
+    this.setData({ preferNearby: true, locationError: "" });
+    wx.showToast({
+      title: `附近优先：${this.formatLocationLabel(context)}`,
+      icon: "none",
+    });
   },
 
   async onSubmitQuery() {

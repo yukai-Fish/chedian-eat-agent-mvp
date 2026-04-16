@@ -168,6 +168,39 @@
   padding: 10rpx 18rpx;
 }
 
+.location-row {
+  margin-top: 16rpx;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.nearby-btn {
+  height: 62rpx;
+  line-height: 62rpx;
+  border-radius: 14rpx;
+  font-size: 22rpx;
+  min-width: 230rpx;
+  padding: 0 16rpx;
+}
+
+.nearby-active {
+  color: #1f6a42;
+  border-color: rgba(57, 146, 96, 0.46);
+  background: rgba(230, 248, 238, 0.9);
+}
+
+.location-text {
+  font-size: 22rpx;
+  color: #5f6f89;
+}
+
+.location-error {
+  margin-top: 10rpx;
+  color: #b13a3a;
+  font-size: 22rpx;
+}
+
 .action-row {
   margin-top: 18rpx;
   display: flex;

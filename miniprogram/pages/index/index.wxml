@@ -51,6 +51,13 @@
         <view class="quick-item" bindtap="onTapQuickPrompt" data-prompt="{{item}}">{{item}}</view>
       </block>
     </view>
+    <view class="location-row">
+      <button class="ghost-btn nearby-btn {{preferNearby?'nearby-active':''}}" loading="{{locationLoading}}" bindtap="onTogglePreferNearby">
+        {{preferNearby ? "附近优先：已开启" : "附近优先（定位）"}}
+      </button>
+      <text class="location-text">{{locationLabel}}</text>
+    </view>
+    <view wx:if="{{locationError}}" class="location-error">{{locationError}}</view>
     <view class="action-row">
       <button class="ghost-btn feedback-btn" bindtap="openFeedback">✦ 反馈新店 / 用餐体验</button>
       <button class="gold-btn submit-btn" loading="{{loading}}" bindtap="onSubmitQuery">发送</button>
