@@ -142,6 +142,22 @@ def _table_has_column(conn: sqlite3.Connection, table: str, column: str) -> bool
 
 
 def _ensure_compat_columns(conn: sqlite3.Connection) -> None:
+    if not _table_has_column(conn, "shops", "poi_id"):
+        conn.execute("ALTER TABLE shops ADD COLUMN poi_id TEXT")
+    if not _table_has_column(conn, "shops", "address"):
+        conn.execute("ALTER TABLE shops ADD COLUMN address TEXT")
+    if not _table_has_column(conn, "shops", "category"):
+        conn.execute("ALTER TABLE shops ADD COLUMN category TEXT")
+    if not _table_has_column(conn, "shops", "geo_source"):
+        conn.execute("ALTER TABLE shops ADD COLUMN geo_source TEXT")
+    if not _table_has_column(conn, "shops", "geo_score"):
+        conn.execute("ALTER TABLE shops ADD COLUMN geo_score REAL")
+
+    if not _table_has_column(conn, "shops", "latitude"):
+        conn.execute("ALTER TABLE shops ADD COLUMN latitude REAL")
+    if not _table_has_column(conn, "shops", "longitude"):
+        conn.execute("ALTER TABLE shops ADD COLUMN longitude REAL")
+
     if not _table_has_column(conn, "usage_events", "anonymous_id"):
         conn.execute("ALTER TABLE usage_events ADD COLUMN anonymous_id TEXT")
     if not _table_has_column(conn, "usage_events", "user_id"):
@@ -176,6 +192,21 @@ def _meta_set(conn: sqlite3.Connection, key: str, value: str) -> None:
     )
 
 
+def _parse_coordinate(value: Any, *, min_value: float = -180, max_value: float = 180) -> Optional[float]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        num = float(text)
+    except (TypeError, ValueError):
+        return None
+    if not (min_value <= num <= max_value):
+        return None
+    return num
+
+
 def _seed_from_csv_if_needed(conn: sqlite3.Connection) -> None:
     # Keep tests deterministic regardless of external CSV churn.
     if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("CHEDIAN_USE_TEST_SEED") == "1":
@@ -183,8 +214,8 @@ def _seed_from_csv_if_needed(conn: sqlite3.Connection) -> None:
         conn.executemany(
             """
             INSERT INTO shops (
-                id, name, campus, area, avg_price, open_hours, tastes, scenes, tags, is_open
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                id, name, campus, area, poi_id, address, category, geo_source, geo_score, latitude, longitude, avg_price, open_hours, tastes, scenes, tags, is_open
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -192,6 +223,13 @@ def _seed_from_csv_if_needed(conn: sqlite3.Connection) -> None:
                     item["name"],
                     item["campus"],
                     item["area"],
+                    str(item.get("poi_id") or "").strip() or None,
+                    str(item.get("address") or "").strip() or None,
+                    str(item.get("category") or "").strip() or None,
+                    str(item.get("geo_source") or "").strip() or None,
+                    _parse_coordinate(item.get("geo_score"), min_value=-1000000, max_value=1000000),
+                    _parse_coordinate(item.get("latitude"), min_value=-90, max_value=90),
+                    _parse_coordinate(item.get("longitude"), min_value=-180, max_value=180),
                     int(item["avg_price"]),
                     item["open_hours"],
                     item["tastes"],
@@ -221,8 +259,8 @@ def _seed_from_csv_if_needed(conn: sqlite3.Connection) -> None:
     conn.executemany(
         """
         INSERT INTO shops (
-            id, name, campus, area, avg_price, open_hours, tastes, scenes, tags, is_open
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            id, name, campus, area, poi_id, address, category, geo_source, geo_score, latitude, longitude, avg_price, open_hours, tastes, scenes, tags, is_open
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             (
@@ -230,6 +268,13 @@ def _seed_from_csv_if_needed(conn: sqlite3.Connection) -> None:
                 item["name"],
                 item["campus"],
                 item.get("area", ""),
+                str(item.get("poi_id") or "").strip() or None,
+                str(item.get("address") or "").strip() or None,
+                str(item.get("category") or "").strip() or None,
+                str(item.get("geo_source") or "").strip() or None,
+                _parse_coordinate(item.get("geo_score"), min_value=-1000000, max_value=1000000),
+                _parse_coordinate(item.get("latitude"), min_value=-90, max_value=90),
+                _parse_coordinate(item.get("longitude"), min_value=-180, max_value=180),
                 int(item["avg_price"]),
                 item.get("open_hours", ""),
                 item.get("tastes", ""),
@@ -266,7 +311,7 @@ def fetch_active_shops() -> List[Dict]:
     with _connect() as conn:
         rows = conn.execute(
             """
-            SELECT id, name, campus, area, avg_price, open_hours, tastes, scenes, tags, is_open
+            SELECT id, name, campus, area, poi_id, address, category, geo_source, geo_score, latitude, longitude, avg_price, open_hours, tastes, scenes, tags, is_open
             FROM shops
             WHERE is_open = 1
             """
@@ -316,7 +361,7 @@ def _name_similarity(query: str, candidate: str) -> float:
 def _fuzzy_find_store_row(conn: sqlite3.Connection, store_name: str) -> Optional[sqlite3.Row]:
     rows = conn.execute(
         """
-        SELECT id, name, campus, area, avg_price, open_hours, tastes, scenes, tags
+        SELECT id, name, campus, area, poi_id, address, category, geo_source, geo_score, latitude, longitude, avg_price, open_hours, tastes, scenes, tags
         FROM shops
         WHERE is_open = 1
         """
@@ -337,7 +382,7 @@ def _fuzzy_find_store_row(conn: sqlite3.Connection, store_name: str) -> Optional
 def _fetch_store_row(conn: sqlite3.Connection, store_name: str) -> Optional[sqlite3.Row]:
     exact = conn.execute(
         """
-        SELECT id, name, campus, area, avg_price, open_hours, tastes, scenes, tags
+        SELECT id, name, campus, area, poi_id, address, category, geo_source, geo_score, latitude, longitude, avg_price, open_hours, tastes, scenes, tags
         FROM shops
         WHERE is_open = 1 AND name = ?
         LIMIT 1
@@ -349,7 +394,7 @@ def _fetch_store_row(conn: sqlite3.Connection, store_name: str) -> Optional[sqli
 
     like_row = conn.execute(
         """
-        SELECT id, name, campus, area, avg_price, open_hours, tastes, scenes, tags
+        SELECT id, name, campus, area, poi_id, address, category, geo_source, geo_score, latitude, longitude, avg_price, open_hours, tastes, scenes, tags
         FROM shops
         WHERE is_open = 1 AND name LIKE ?
         ORDER BY CASE WHEN name LIKE ? THEN 0 ELSE 1 END, avg_price ASC
@@ -409,6 +454,10 @@ def fetch_store_detail_by_name(store_name: str) -> Optional[Dict[str, Any]]:
         "name": str(shop_row["name"]),
         "campus": str(shop_row["campus"]),
         "area": str(shop_row["area"] or ""),
+        "poiId": str(shop_row["poi_id"] or ""),
+        "address": str(shop_row["address"] or ""),
+        "category": str(shop_row["category"] or ""),
+        "geoSource": str(shop_row["geo_source"] or ""),
         "avgPrice": int(shop_row["avg_price"] or 0),
         "openHours": str(shop_row["open_hours"] or ""),
         "categoryTags": _split_tag_text(str(shop_row["tags"] or "")),
@@ -418,3 +467,26 @@ def fetch_store_detail_by_name(store_name: str) -> Optional[Dict[str, Any]]:
         "reviewCount": len(reviews),
         "avgRating": round(sum(ratings) / len(ratings), 2) if ratings else None,
     }
+
+
+def resolve_shop_identity_by_name(store_name: str) -> Optional[Dict[str, Any]]:
+    ensure_database()
+    key = (store_name or "").strip()
+    if not key:
+        return None
+
+    with _connect() as conn:
+        row = _fetch_store_row(conn, key)
+        if not row:
+            return None
+        return {
+            "id": str(row["id"]),
+            "name": str(row["name"]),
+            "campus": str(row["campus"] or ""),
+            "area": str(row["area"] or ""),
+            "poi_id": str(row["poi_id"] or ""),
+            "address": str(row["address"] or ""),
+            "category": str(row["category"] or ""),
+            "latitude": float(row["latitude"]) if row["latitude"] is not None else None,
+            "longitude": float(row["longitude"]) if row["longitude"] is not None else None,
+        }

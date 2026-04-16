@@ -6,6 +6,8 @@
   <view wx:if="{{!loading && found && store}}" class="detail-card">
     <view class="name">{{store.name}}</view>
     <view class="meta">{{store.campus}} {{store.area ? (' - ' + store.area) : ''}}</view>
+    <view wx:if="{{store.address}}" class="meta">地址：{{store.address}}</view>
+    <view wx:if="{{store.category}}" class="meta">分类：{{store.category}}</view>
     <view wx:if="{{openStatus}}" class="status-line">
       <text class="status-badge status-{{openStatus.status}}">{{openStatus.label}}</text>
       <text class="status-detail">{{openStatus.detail}}</text>

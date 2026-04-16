@@ -1,18 +1,4 @@
 <view class="page">
-  <view class="hero glass-card">
-    <view class="hero-top">
-      <view>
-        <view class="title">成电吃什么</view>
-        <view class="subtitle">校园美食推荐 · 小程序版</view>
-      </view>
-      <view class="identity-wrap">
-        <view class="identity">{{identityLabel}}</view>
-        <button class="ghost-btn login-btn" loading="{{loginLoading}}" bindtap="onWechatLogin">微信登录</button>
-      </view>
-    </view>
-    <view class="summary">{{summary || "输入你的需求，获取校园美食推荐。"}}</view>
-  </view>
-
   <view class="ranking glass-card">
     <view class="ranking-head">
       <text class="ranking-title">今日热门榜</text>

@@ -12,42 +12,42 @@ def test_candidate_shops_prefer_nearby_campus(monkeypatch) -> None:
         lambda: [
             {
                 "id": "a",
-                "name": "清水河店A",
-                "campus": "清水河",
-                "area": "西门",
+                "name": "campus-a-shop",
+                "campus": "campus-a",
+                "area": "west",
                 "avg_price": 20,
                 "open_hours": "10:00-22:00",
-                "tastes": "清淡",
-                "scenes": "一个人",
-                "tags": "面馆",
+                "tastes": "light",
+                "scenes": "solo",
+                "tags": "noodle",
             },
             {
                 "id": "b",
-                "name": "沙河店B",
-                "campus": "沙河",
-                "area": "校内",
+                "name": "campus-b-shop",
+                "campus": "campus-b",
+                "area": "inner",
                 "avg_price": 20,
                 "open_hours": "10:00-22:00",
-                "tastes": "清淡",
-                "scenes": "一个人",
-                "tags": "面馆",
+                "tastes": "light",
+                "scenes": "solo",
+                "tags": "noodle",
             },
         ],
     )
 
     ranked = _candidate_shops(
-        "随便吃点",
+        "anything",
         limit=2,
         nearby_context={
             "preferNearby": True,
             "latitude": 30.6742,
             "longitude": 104.1003,
-            "campus": "沙河",
-            "areaHint": "校内",
+            "campus": "campus-b",
+            "areaHint": "inner",
         },
     )
     assert len(ranked) == 2
-    assert ranked[0]["name"] == "沙河店B"
+    assert ranked[0]["name"] == "campus-b-shop"
 
 
 def test_candidate_shops_prefer_nearby_distance(monkeypatch) -> None:
@@ -59,40 +59,97 @@ def test_candidate_shops_prefer_nearby_distance(monkeypatch) -> None:
         "app.services.spark_local_recommend_service.fetch_active_shops",
         lambda: [
             {
-                "id": "west",
-                "name": "清水河西门店",
-                "campus": "清水河",
-                "area": "西门",
+                "id": "near",
+                "name": "near-shop",
+                "campus": "campus-a",
+                "area": "west",
+                "latitude": 30.7522,
+                "longitude": 103.9349,
                 "avg_price": 22,
                 "open_hours": "10:00-22:00",
-                "tastes": "清淡",
-                "scenes": "一个人",
-                "tags": "面馆",
+                "tastes": "light",
+                "scenes": "solo",
+                "tags": "noodle",
             },
             {
-                "id": "south",
-                "name": "清水河南门店",
-                "campus": "清水河",
-                "area": "南门",
+                "id": "far",
+                "name": "far-shop",
+                "campus": "campus-a",
+                "area": "south",
+                "latitude": 30.6742,
+                "longitude": 104.1003,
                 "avg_price": 22,
                 "open_hours": "10:00-22:00",
-                "tastes": "清淡",
-                "scenes": "一个人",
-                "tags": "面馆",
+                "tastes": "light",
+                "scenes": "solo",
+                "tags": "noodle",
             },
         ],
     )
 
     ranked = _candidate_shops(
-        "随便吃点",
+        "anything",
         limit=2,
         nearby_context={
             "preferNearby": True,
             "latitude": 30.7522,
-            "longitude": 103.9259,
-            "campus": "清水河",
-            "areaHint": "西门",
+            "longitude": 103.9349,
+            "campus": "campus-a",
+            "areaHint": "west",
         },
     )
     assert len(ranked) == 2
-    assert ranked[0]["name"] == "清水河西门店"
+    assert ranked[0]["name"] == "near-shop"
+
+
+def test_candidate_shops_prefers_real_coordinates_when_present(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.services.spark_local_recommend_service.parse_query",
+        lambda _q: ParsedSlots(budget_max=None, location=None, scene=None, taste=None, time=None),
+    )
+    monkeypatch.setattr(
+        "app.services.spark_local_recommend_service.fetch_active_shops",
+        lambda: [
+            {
+                "id": "latlng-near",
+                "name": "latlng-near-shop",
+                "campus": "unknown-campus",
+                "area": "unknown-area",
+                "latitude": 30.7521,
+                "longitude": 103.9348,
+                "avg_price": 22,
+                "open_hours": "10:00-22:00",
+                "tastes": "light",
+                "scenes": "solo",
+                "tags": "noodle",
+            },
+            {
+                "id": "latlng-far",
+                "name": "latlng-far-shop",
+                "campus": "unknown-campus",
+                "area": "unknown-area",
+                "latitude": 30.6742,
+                "longitude": 104.1003,
+                "avg_price": 22,
+                "open_hours": "10:00-22:00",
+                "tastes": "light",
+                "scenes": "solo",
+                "tags": "noodle",
+            },
+        ],
+    )
+
+    ranked = _candidate_shops(
+        "anything",
+        limit=2,
+        nearby_context={
+            "preferNearby": True,
+            "latitude": 30.7522,
+            "longitude": 103.9349,
+            "campus": "unknown-campus",
+            "areaHint": "unknown-area",
+        },
+    )
+    assert len(ranked) == 2
+    assert ranked[0]["name"] == "latlng-near-shop"
+    assert ranked[0]["distance_km"] is not None

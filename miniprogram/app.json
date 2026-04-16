@@ -1,6 +1,8 @@
 {
   "pages": [
     "pages/index/index",
+    "pages/ads/index",
+    "pages/profile/index",
     "pages/store-detail/index"
   ],
   "window": {
@@ -14,6 +16,26 @@
     "scope.userLocation": {
       "desc": "用于优先推荐你附近可步行到达的店铺"
     }
+  },
+  "tabBar": {
+    "color": "#6b7890",
+    "selectedColor": "#7b5b2a",
+    "backgroundColor": "#f8f4ea",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "问询"
+      },
+      {
+        "pagePath": "pages/ads/index",
+        "text": "商家推荐"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "我的"
+      }
+    ]
   },
   "style": "v2",
   "sitemapLocation": "sitemap.json"

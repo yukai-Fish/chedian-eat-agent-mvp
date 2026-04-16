@@ -1,5 +1,15 @@
-const { fetchRecommendations, submitFeedback, fetchStoreDetail, fetchTodayRankings, logRankingClick, wechatLogin, API_BASE_URL } = require("../../utils/api");
-const { getCurrentIdentity, saveAuthenticatedIdentity } = require("../../utils/identity");
+const {
+  fetchRecommendations,
+  submitFeedback,
+  fetchStoreDetail,
+  fetchTodayRankings,
+  logRankingClick,
+  fetchProfileData,
+  addFavorite,
+  removeFavorite,
+  API_BASE_URL,
+} = require("../../utils/api");
+const { getCurrentIdentity } = require("../../utils/identity");
 const { parseRecommendationAnswer } = require("../../utils/recommendation");
 
 const QUICK_PROMPTS = [
@@ -17,16 +27,16 @@ const FOLLOW_UP_PRESETS = [
 const MAX_HISTORY = 8;
 const MAX_FAVORITES = 50;
 const CAMPUS_CENTERS = {
-  清水河: { latitude: 30.7522, longitude: 103.9349 },
-  沙河: { latitude: 30.6742, longitude: 104.1003 },
+  "清水河": { latitude: 30.7522, longitude: 103.9349 },
+  "沙河": { latitude: 30.6742, longitude: 104.1003 },
 };
 const CAMPUS_AREA_ANCHORS = {
-  清水河: [
+  "清水河": [
     { areaHint: "校内", latitude: 30.7522, longitude: 103.9349 },
     { areaHint: "西门", latitude: 30.7522, longitude: 103.9259 },
     { areaHint: "南门", latitude: 30.7452, longitude: 103.9349 },
   ],
-  沙河: [
+  "沙河": [
     { areaHint: "校内", latitude: 30.6742, longitude: 104.1003 },
     { areaHint: "西门", latitude: 30.6742, longitude: 104.0945 },
     { areaHint: "南门", latitude: 30.6697, longitude: 104.1003 },
@@ -75,6 +85,20 @@ function mergeDislikedNames(...nameLists) {
   return merged.slice(-MAX_DISLIKED);
 }
 
+function mergeUniqueStrings(...lists) {
+  const seen = new Set();
+  const merged = [];
+  lists.forEach((list) => {
+    (Array.isArray(list) ? list : []).forEach((item) => {
+      const text = String(item || "").trim();
+      if (!text || seen.has(text)) return;
+      seen.add(text);
+      merged.push(text);
+    });
+  });
+  return merged;
+}
+
 function toRadians(deg) {
   return (Number(deg) * Math.PI) / 180;
 }
@@ -102,7 +126,7 @@ function inferCampusContext(latitude, longitude) {
   if (!bestCampus) return null;
 
   const anchors = CAMPUS_AREA_ANCHORS[bestCampus] || [];
-  let bestArea = "校内";
+  let bestArea = "鏍″唴";
   let bestAreaDistance = Number.POSITIVE_INFINITY;
   anchors.forEach((anchor) => {
     const km = distanceKm(latitude, longitude, anchor.latitude, anchor.longitude);
@@ -129,7 +153,7 @@ function buildNearbyHintText(locationContext) {
 function parseIntervals(openHoursText) {
   const text = String(openHoursText || "").trim();
   if (!text || text === "无") return { unknown: true, allDay: false, intervals: [] };
-  if (text.includes("全天") || text.includes("24:00-24:00")) {
+  if (text.includes("鍏ㄥぉ") || text.includes("24:00-24:00")) {
     return { unknown: false, allDay: true, intervals: [[0, 24 * 60]] };
   }
   const matches = [...text.matchAll(/(\d{1,2})[:：](\d{1,2})/g)];
@@ -168,8 +192,6 @@ function isOpenNow(openHoursText) {
 Page({
   data: {
     apiBaseUrl: API_BASE_URL,
-    identityLabel: "匿名使用",
-    loginLoading: false,
     query: "",
     loading: false,
     error: "",
@@ -281,17 +303,18 @@ Page({
     const identity = getCurrentIdentity();
     this.identity = identity;
     this.setData({
-      identityLabel: identity.kind === "authenticated" ? "已登录" : `匿名：${identity.anonymousId.slice(-6)}`,
       query: QUICK_PROMPTS[0],
     });
-    this.loadLocalUserData();
+    this.loadUserData();
     this.loadTodayRankings();
   },
 
-  refreshIdentityView() {
-    const identity = this.identity || getCurrentIdentity();
-    const label = identity.kind === "authenticated" ? "微信已登录" : `匿名：${identity.anonymousId.slice(-6)}`;
-    this.setData({ identityLabel: label });
+  onShow() {
+    const latest = getCurrentIdentity();
+    if (!this.identity || latest.uid !== this.identity.uid) {
+      this.identity = latest;
+    }
+    this.loadUserData();
   },
 
   formatLocationLabel(locationContext) {
@@ -371,13 +394,38 @@ Page({
     };
   },
 
-  loadLocalUserData() {
+  readLocalUserData() {
     const keys = this.getStorageKeys();
     const favorites = wx.getStorageSync(keys.favoritesKey);
     const queryHistory = wx.getStorageSync(keys.historyKey);
-    this.setData({
+    return {
       favorites: Array.isArray(favorites) ? favorites.slice(0, MAX_FAVORITES) : [],
       queryHistory: Array.isArray(queryHistory) ? queryHistory.slice(0, MAX_HISTORY) : [],
+    };
+  },
+
+  async loadUserData() {
+    const local = this.readLocalUserData();
+    let favorites = local.favorites;
+    let queryHistory = local.queryHistory;
+
+    if (this.identity && this.identity.userId) {
+      try {
+        const remote = await fetchProfileData(this.identity.userId);
+        const remoteFavorites = Array.isArray(remote && remote.favorites) ? remote.favorites : [];
+        const remoteHistory = Array.isArray(remote && remote.queryHistory) ? remote.queryHistory : [];
+        favorites = mergeUniqueStrings(remoteFavorites, favorites).slice(0, MAX_FAVORITES);
+        queryHistory = mergeUniqueStrings(remoteHistory, queryHistory).slice(0, MAX_HISTORY);
+        this.saveFavorites(favorites);
+        this.saveQueryHistory(queryHistory);
+      } catch (_err) {
+        // keep local cache fallback
+      }
+    }
+
+    this.setData({
+      favorites,
+      queryHistory,
     });
   },
 
@@ -534,49 +582,6 @@ Page({
     this.setData({ query: text });
   },
 
-  async onWechatLogin() {
-    if (this.data.loginLoading) return;
-    if (this.identity && this.identity.kind === "authenticated") {
-      wx.showToast({ title: "当前已微信登录", icon: "none" });
-      return;
-    }
-
-    this.setData({ loginLoading: true });
-    try {
-      const loginResult = await new Promise((resolve, reject) => {
-        wx.login({
-          success: (res) => {
-            if (res && res.code) {
-              resolve(res);
-              return;
-            }
-            reject(new Error("wx.login 未返回 code"));
-          },
-          fail: (err) => reject(new Error((err && err.errMsg) || "wx.login 失败")),
-        });
-      });
-
-      const resp = await wechatLogin({
-        code: loginResult.code,
-        anonymousId: this.identity ? this.identity.anonymousId : undefined,
-      });
-      if (!resp || !resp.ok || !resp.userId) {
-        throw new Error((resp && resp.error) || "微信登录失败，请稍后再试");
-      }
-
-      this.identity = saveAuthenticatedIdentity(resp.userId, resp.anonymousId || (this.identity && this.identity.anonymousId));
-      this.refreshIdentityView();
-      wx.showToast({ title: "微信登录成功", icon: "success" });
-    } catch (err) {
-      wx.showToast({
-        title: err && err.message ? err.message : "微信登录失败",
-        icon: "none",
-      });
-    } finally {
-      this.setData({ loginLoading: false });
-    }
-  },
-
   async onTogglePreferNearby() {
     if (this.data.loading || this.data.locationLoading) return;
     if (this.data.preferNearby) {
@@ -620,16 +625,37 @@ Page({
     });
   },
 
-  onToggleFavorite(e) {
+  async onToggleFavorite(e) {
     const name = (e.currentTarget.dataset.name || "").trim();
     if (!name) return;
     const current = this.data.favorites || [];
     const exists = current.includes(name);
     const next = exists ? current.filter((item) => item !== name) : [name].concat(current).slice(0, MAX_FAVORITES);
     this.saveFavorites(next);
+    if (this.identity && this.identity.userId) {
+      try {
+        if (exists) {
+          await removeFavorite({
+            userId: this.identity.userId,
+            shopId: name,
+          });
+        } else {
+          await addFavorite({
+            userId: this.identity.userId,
+            anonymousId: this.identity.anonymousId,
+            shopId: name,
+            shopName: name,
+            source: "miniprogram_favorite",
+          });
+        }
+      } catch (_err) {
+        this.saveFavorites(current);
+        wx.showToast({ title: "收藏同步失败，请稍后再试", icon: "none" });
+        return;
+      }
+    }
     wx.showToast({ title: exists ? "已取消收藏" : "已收藏", icon: "none" });
   },
-
   onTapHistoryQuery(e) {
     const text = (e.currentTarget.dataset.query || "").trim();
     if (!text) return;
@@ -663,10 +689,10 @@ Page({
     let overlap = currentVisible.filter((name) => previousVisible.includes(name));
     if (overlap.length === 0 || currentVisible.length === 0) return;
 
-    // Retry once with an expanded exclusion set so "换口味" is more visibly different.
+    // Retry once with an expanded exclusion set so "鎹㈠彛鍛? is more visibly different.
     const retryDisliked = mergeDislikedNames(nextDisliked, currentVisible);
     if (retryDisliked.length <= nextDisliked.length) {
-      wx.showToast({ title: "已尽量换口味，可再点一次继续换", icon: "none" });
+      wx.showToast({ title: "宸插敖閲忔崲鍙ｅ懗锛屽彲鍐嶇偣涓€娆＄户缁崲", icon: "none" });
       return;
     }
 
@@ -761,7 +787,7 @@ Page({
   onClearDisliked() {
     if (this.data.loading) return;
     this.setData({ dislikedNames: [] });
-    wx.showToast({ title: "已清除排除项", icon: "none" });
+    wx.showToast({ title: "宸叉竻闄ゆ帓闄ら」", icon: "none" });
   },
 
   openQuickDining(e) {
@@ -834,7 +860,7 @@ Page({
     } catch (err) {
       this.setData({ quickDiningLoading: false });
       wx.showToast({
-        title: err && err.message ? err.message : "提交失败，请稍后重试",
+        title: err && err.message ? err.message : "鎻愪氦澶辫触锛岃绋嶅悗閲嶈瘯",
         icon: "none",
       });
     }
@@ -919,9 +945,13 @@ Page({
     } catch (err) {
       this.setData({ feedbackLoading: false });
       wx.showToast({
-        title: err && err.message ? err.message : "提交失败，请稍后重试",
+        title: err && err.message ? err.message : "鎻愪氦澶辫触锛岃绋嶅悗閲嶈瘯",
         icon: "none",
       });
     }
   },
 });
+
+
+
+

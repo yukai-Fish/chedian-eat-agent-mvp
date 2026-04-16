@@ -17,10 +17,20 @@ page {
   background: linear-gradient(120deg, #7c6036 0%, #c49a58 46%, #3d57cf 100%);
   color: #fff;
   border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
 }
 
 .ghost-btn {
   background: rgba(255, 255, 255, 0.76);
   color: #7b5b2a;
   border: 1rpx solid rgba(195, 156, 83, 0.38);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
 }

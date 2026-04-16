@@ -143,6 +143,23 @@ class FavoriteListResponse(BaseModel):
     items: List[FavoriteItem]
 
 
+class ProfileSyncRequest(BaseModel):
+    userId: str = Field(..., min_length=1, max_length=120)
+    anonymousId: Optional[str] = Field(default=None, max_length=80)
+    favorites: List[str] = Field(default_factory=list, max_length=100)
+    queryHistory: List[str] = Field(default_factory=list, max_length=100)
+    source: Optional[str] = Field(default="miniprogram", max_length=60)
+
+
+class ProfileDataResponse(BaseModel):
+    ok: bool = True
+    favorites: List[str] = Field(default_factory=list)
+    queryHistory: List[str] = Field(default_factory=list)
+    migratedFavorites: int = 0
+    migratedHistory: int = 0
+    linkedHistoryEvents: int = 0
+
+
 class FeedbackRequest(BaseModel):
     feedbackType: str = Field(..., pattern="^(new_store|dining_feedback)$")
     storeName: str = Field(..., min_length=1, max_length=80)
@@ -188,6 +205,10 @@ class StoreDetailData(BaseModel):
     name: str
     campus: str
     area: Optional[str] = None
+    poiId: Optional[str] = None
+    address: Optional[str] = None
+    category: Optional[str] = None
+    geoSource: Optional[str] = None
     avgPrice: int
     openHours: Optional[str] = None
     categoryTags: List[str] = Field(default_factory=list)

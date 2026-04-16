@@ -99,6 +99,7 @@ def log_ranking_click_event(
 
 
 def fetch_recent_usage_events(days: int = 7) -> List[Dict[str, Any]]:
+    ensure_database()
     with _connect() as conn:
         rows = conn.execute(
             """
@@ -110,3 +111,49 @@ def fetch_recent_usage_events(days: int = 7) -> List[Dict[str, Any]]:
             (f"-{days} day",),
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+def bind_anonymous_events_to_user(*, anonymous_id: str, user_id: str) -> int:
+    ensure_database()
+    anon = str(anonymous_id or "").strip()
+    uid = str(user_id or "").strip()
+    if not anon or not uid:
+        return 0
+
+    with _connect() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE usage_events
+            SET user_id = ?
+            WHERE anonymous_id = ?
+              AND (user_id IS NULL OR user_id = '')
+            """,
+            (uid, anon),
+        )
+        conn.commit()
+        return int(cursor.rowcount or 0)
+
+
+def list_recent_query_history(*, user_id: str, limit: int = 20) -> List[str]:
+    ensure_database()
+    uid = str(user_id or "").strip()
+    if not uid:
+        return []
+
+    max_limit = max(1, min(int(limit), 100))
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT query_text, MAX(datetime(created_at)) AS latest_at
+            FROM usage_events
+            WHERE event_type = 'query'
+              AND user_id = ?
+              AND query_text IS NOT NULL
+              AND TRIM(query_text) <> ''
+            GROUP BY query_text
+            ORDER BY latest_at DESC
+            LIMIT ?
+            """,
+            (uid, max_limit),
+        ).fetchall()
+    return [str(row["query_text"]) for row in rows if str(row["query_text"]).strip()]

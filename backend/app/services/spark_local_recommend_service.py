@@ -87,6 +87,11 @@ def _normalize_area(text: Any) -> str:
 
 
 def _shop_anchor_point(shop: Dict[str, Any]) -> Optional[Tuple[float, float]]:
+    lat = _to_float(shop.get("latitude"))
+    lng = _to_float(shop.get("longitude"))
+    if lat is not None and lng is not None and -90 <= lat <= 90 and -180 <= lng <= 180:
+        return lat, lng
+
     campus_text = str(shop.get("campus", "")).strip()
     area_text = _normalize_area(shop.get("area", ""))
 
@@ -206,6 +211,8 @@ def _candidate_shops(
             "name": str(row.get("name", "")),
             "campus": str(row.get("campus", "")),
             "area": str(row.get("area", "")),
+            "latitude": _to_float(row.get("latitude")),
+            "longitude": _to_float(row.get("longitude")),
             "avg_price": int(row.get("avg_price", 0) or 0),
             "open_hours": str(row.get("open_hours", "")),
             "tastes": str(row.get("tastes", "")),

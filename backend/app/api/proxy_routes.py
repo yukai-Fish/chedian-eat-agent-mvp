@@ -6,6 +6,8 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from app.models.schemas import (
     FeedbackRequest,
     FeedbackResponse,
+    ProfileDataResponse,
+    ProfileSyncRequest,
     StoreDetailResponse,
     StoreNameSuggestionsResponse,
     WechatLoginRequest,
@@ -15,16 +17,48 @@ from app.models.schemas import (
     WorkflowResumeRequest,
     WorkflowUploadFileResponse,
 )
+from app.services.favorites_repository import add_favorite, list_favorites
 from app.services.feedback_repository import save_feedback, suggest_store_names
-from app.services.shop_repository import fetch_store_detail_by_name
+from app.services.shop_repository import fetch_store_detail_by_name, resolve_shop_identity_by_name
 from app.services.spark_local_recommend_service import ask_spark_local_recommend
 from app.services.user_profile import build_iterative_profile
-from app.services.usage_events import log_query_event
+from app.services.usage_events import bind_anonymous_events_to_user, list_recent_query_history, log_query_event
 from app.services.wechat_auth_service import login_with_wechat_code
 from app.services.xfyun_workflow_service import ask_workflow, resume_workflow, upload_workflow_file
 
 
 proxy_router = APIRouter()
+
+
+def _clean_text_list(values: list[str], *, limit: int, max_length: int) -> list[str]:
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for raw in values or []:
+        text = str(raw or "").strip()
+        if not text:
+            continue
+        if len(text) > max_length:
+            text = text[:max_length]
+        if text in seen:
+            continue
+        seen.add(text)
+        cleaned.append(text)
+        if len(cleaned) >= limit:
+            break
+    return cleaned
+
+
+def _favorite_names_for_user(user_id: str, *, limit: int = 100) -> list[str]:
+    items = list_favorites(user_id=user_id, limit=limit)
+    names: list[str] = []
+    seen: set[str] = set()
+    for row in items:
+        name = str(row.get("shop_name") or row.get("shop_id") or "").strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        names.append(name)
+    return names
 
 
 @proxy_router.post("/recommend", response_model=WorkflowRecommendResponse)
@@ -98,6 +132,71 @@ def wechat_login_proxy(req: WechatLoginRequest) -> WechatLoginResponse:
         anonymous_id=req.anonymousId,
     )
     return WechatLoginResponse(**result)
+
+
+@proxy_router.get("/profile/data", response_model=ProfileDataResponse)
+def profile_data_proxy(user_id: str = "") -> ProfileDataResponse:
+    uid = user_id.strip()
+    if not uid:
+        raise HTTPException(status_code=400, detail="user_id is required.")
+    return ProfileDataResponse(
+        ok=True,
+        favorites=_favorite_names_for_user(uid, limit=100),
+        queryHistory=list_recent_query_history(user_id=uid, limit=20),
+    )
+
+
+@proxy_router.post("/profile/sync-local", response_model=ProfileDataResponse)
+def profile_sync_local_proxy(req: ProfileSyncRequest) -> ProfileDataResponse:
+    uid = req.userId.strip()
+    anon = (req.anonymousId or "").strip() or None
+    source = (req.source or "miniprogram").strip() or "miniprogram"
+
+    normalized_favorites = _clean_text_list(req.favorites, limit=80, max_length=120)
+    normalized_history = _clean_text_list(req.queryHistory, limit=80, max_length=300)
+
+    linked_count = bind_anonymous_events_to_user(anonymous_id=anon or "", user_id=uid) if anon else 0
+
+    migrated_favorites = 0
+    for name in normalized_favorites:
+        matched = resolve_shop_identity_by_name(name)
+        shop_id = str((matched or {}).get("id") or name).strip()
+        shop_name = str((matched or {}).get("name") or name).strip()
+        if not shop_id:
+            continue
+        add_favorite(
+            user_id=uid,
+            shop_id=shop_id,
+            shop_name=shop_name or None,
+            anonymous_id=anon,
+            source=f"{source}-sync",
+        )
+        migrated_favorites += 1
+
+    existing_history = set(list_recent_query_history(user_id=uid, limit=200))
+    migrated_history = 0
+    for query in normalized_history:
+        if query in existing_history:
+            continue
+        log_query_event(
+            query,
+            uid=uid,
+            anonymous_id=anon,
+            user_id=uid,
+            source=f"{source}-sync",
+            meta={"profile_sync": True},
+        )
+        existing_history.add(query)
+        migrated_history += 1
+
+    return ProfileDataResponse(
+        ok=True,
+        favorites=_favorite_names_for_user(uid, limit=100),
+        queryHistory=list_recent_query_history(user_id=uid, limit=20),
+        migratedFavorites=migrated_favorites,
+        migratedHistory=migrated_history,
+        linkedHistoryEvents=linked_count,
+    )
 
 
 @proxy_router.post("/recommend/resume", response_model=WorkflowRecommendResponse)

@@ -1,0 +1,24 @@
+<view class="page">
+  <view class="hero glass-card">
+    <text class="title">商家推荐广告位</text>
+    <text class="subtitle">面向成电同学校园场景，精准曝光到“正在找吃的”用户。</text>
+    <view class="hero-actions">
+      <button class="ghost-btn action-btn" bindtap="onCopyContact">复制商务微信</button>
+      <button class="gold-btn action-btn" bindtap="onGoInquiry">返回问询页</button>
+    </view>
+    <text class="contact">商务微信：{{contactWechat}}</text>
+  </view>
+
+  <view class="list">
+    <block wx:for="{{adSlots}}" wx:key="id">
+      <view class="slot-card glass-card">
+        <view class="slot-head">
+          <text class="slot-title">{{item.title}}</text>
+          <text class="slot-price">{{item.price}}</text>
+        </view>
+        <text class="slot-scene">{{item.scene}}</text>
+        <text class="slot-audience">{{item.audience}}</text>
+      </view>
+    </block>
+  </view>
+</view>

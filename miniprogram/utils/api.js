@@ -84,6 +84,38 @@ function wechatLogin(payload) {
   });
 }
 
+function fetchProfileData(userId) {
+  const uid = encodeURIComponent(String(userId || "").trim());
+  return request({
+    url: `/api/profile/data?user_id=${uid}`,
+    method: "GET",
+  });
+}
+
+function syncProfileLocal(payload) {
+  return request({
+    url: "/api/profile/sync-local",
+    method: "POST",
+    data: payload,
+  });
+}
+
+function addFavorite(payload) {
+  return request({
+    url: "/api/v1/favorites",
+    method: "POST",
+    data: payload,
+  });
+}
+
+function removeFavorite(payload) {
+  return request({
+    url: "/api/v1/favorites",
+    method: "DELETE",
+    data: payload,
+  });
+}
+
 module.exports = {
   fetchRecommendations,
   submitFeedback,
@@ -91,5 +123,9 @@ module.exports = {
   fetchTodayRankings,
   logRankingClick,
   wechatLogin,
+  fetchProfileData,
+  syncProfileLocal,
+  addFavorite,
+  removeFavorite,
   API_BASE_URL,
 };

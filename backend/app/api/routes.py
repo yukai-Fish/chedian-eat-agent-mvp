@@ -21,7 +21,7 @@ from app.services.feedback_repository import save_feedback, suggest_store_names
 from app.services.hot_ranking import get_today_hot_rankings
 from app.services.parser import parse_query
 from app.services.recommender import recommend
-from app.services.shop_repository import count_shops, fetch_store_detail_by_name
+from app.services.shop_repository import count_shops, fetch_store_detail_by_name, resolve_shop_identity_by_name
 from app.services.usage_events import log_query_event, log_ranking_click_event
 
 
@@ -77,10 +77,16 @@ def get_favorites(user_id: str) -> FavoriteListResponse:
 
 @router.post("/favorites", response_model=EventAckResponse)
 def add_favorite_api(req: FavoriteWriteRequest) -> EventAckResponse:
+    raw_shop_id = req.shopId.strip()
+    raw_shop_name = (req.shopName or "").strip()
+    matched = resolve_shop_identity_by_name(raw_shop_name or raw_shop_id)
+    final_shop_id = str((matched or {}).get("id") or raw_shop_id).strip()
+    final_shop_name = str((matched or {}).get("name") or raw_shop_name or raw_shop_id).strip() or None
+
     add_favorite(
         user_id=req.userId.strip(),
-        shop_id=req.shopId.strip(),
-        shop_name=(req.shopName or "").strip() or None,
+        shop_id=final_shop_id,
+        shop_name=final_shop_name,
         anonymous_id=(req.anonymousId or "").strip() or None,
         source=(req.source or "web").strip() or "web",
     )
@@ -89,7 +95,15 @@ def add_favorite_api(req: FavoriteWriteRequest) -> EventAckResponse:
 
 @router.delete("/favorites", response_model=EventAckResponse)
 def remove_favorite_api(req: FavoriteRemoveRequest) -> EventAckResponse:
-    remove_favorite(user_id=req.userId.strip(), shop_id=req.shopId.strip())
+    uid = req.userId.strip()
+    raw_shop_id = req.shopId.strip()
+    matched = resolve_shop_identity_by_name(raw_shop_id)
+    final_shop_id = str((matched or {}).get("id") or raw_shop_id).strip()
+
+    remove_favorite(user_id=uid, shop_id=final_shop_id)
+    if final_shop_id != raw_shop_id:
+        # Backward compatibility for rows previously saved with plain store names.
+        remove_favorite(user_id=uid, shop_id=raw_shop_id)
     return EventAckResponse(ok=True)
 
 

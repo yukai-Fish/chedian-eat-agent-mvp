@@ -1,0 +1,91 @@
+.page {
+  padding: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.hero {
+  padding: 22rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.title {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #1d2f4a;
+}
+
+.subtitle {
+  font-size: 24rpx;
+  color: #5f6f89;
+  line-height: 1.55;
+}
+
+.hero-actions {
+  margin-top: 8rpx;
+  display: flex;
+  gap: 12rpx;
+}
+
+.action-btn {
+  margin: 0;
+  flex: 1;
+  height: 68rpx;
+  line-height: 68rpx;
+  border-radius: 14rpx;
+  font-size: 24rpx;
+}
+
+.contact {
+  margin-top: 2rpx;
+  font-size: 22rpx;
+  color: #7b5b2a;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.slot-card {
+  padding: 20rpx;
+}
+
+.slot-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.slot-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #23334f;
+}
+
+.slot-price {
+  font-size: 24rpx;
+  color: #7a5a2b;
+  border-radius: 999rpx;
+  border: 1rpx solid rgba(193, 154, 82, 0.35);
+  background: rgba(255, 255, 255, 0.8);
+  padding: 6rpx 14rpx;
+}
+
+.slot-scene {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #4f5f79;
+}
+
+.slot-audience {
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: #6c7890;
+  line-height: 1.5;
+}
