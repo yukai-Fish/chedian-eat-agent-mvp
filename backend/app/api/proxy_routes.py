@@ -8,6 +8,8 @@ from app.models.schemas import (
     FeedbackResponse,
     StoreDetailResponse,
     StoreNameSuggestionsResponse,
+    WechatLoginRequest,
+    WechatLoginResponse,
     WorkflowRecommendRequest,
     WorkflowRecommendResponse,
     WorkflowResumeRequest,
@@ -18,6 +20,7 @@ from app.services.shop_repository import fetch_store_detail_by_name
 from app.services.spark_local_recommend_service import ask_spark_local_recommend
 from app.services.user_profile import build_iterative_profile
 from app.services.usage_events import log_query_event
+from app.services.wechat_auth_service import login_with_wechat_code
 from app.services.xfyun_workflow_service import ask_workflow, resume_workflow, upload_workflow_file
 
 
@@ -86,6 +89,15 @@ def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendRe
         nearby_context=nearby_context,
     )
     return WorkflowRecommendResponse(**result)
+
+
+@proxy_router.post("/auth/wechat-login", response_model=WechatLoginResponse)
+def wechat_login_proxy(req: WechatLoginRequest) -> WechatLoginResponse:
+    result = login_with_wechat_code(
+        code=req.code,
+        anonymous_id=req.anonymousId,
+    )
+    return WechatLoginResponse(**result)
 
 
 @proxy_router.post("/recommend/resume", response_model=WorkflowRecommendResponse)

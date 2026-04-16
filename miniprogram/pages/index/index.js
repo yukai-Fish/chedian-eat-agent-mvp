@@ -1,5 +1,5 @@
-const { fetchRecommendations, submitFeedback, fetchStoreDetail, fetchTodayRankings, logRankingClick, API_BASE_URL } = require("../../utils/api");
-const { getCurrentIdentity } = require("../../utils/identity");
+const { fetchRecommendations, submitFeedback, fetchStoreDetail, fetchTodayRankings, logRankingClick, wechatLogin, API_BASE_URL } = require("../../utils/api");
+const { getCurrentIdentity, saveAuthenticatedIdentity } = require("../../utils/identity");
 const { parseRecommendationAnswer } = require("../../utils/recommendation");
 
 const QUICK_PROMPTS = [
@@ -169,6 +169,7 @@ Page({
   data: {
     apiBaseUrl: API_BASE_URL,
     identityLabel: "匿名使用",
+    loginLoading: false,
     query: "",
     loading: false,
     error: "",
@@ -284,6 +285,12 @@ Page({
     });
     this.loadLocalUserData();
     this.loadTodayRankings();
+  },
+
+  refreshIdentityView() {
+    const identity = this.identity || getCurrentIdentity();
+    const label = identity.kind === "authenticated" ? "微信已登录" : `匿名：${identity.anonymousId.slice(-6)}`;
+    this.setData({ identityLabel: label });
   },
 
   formatLocationLabel(locationContext) {
@@ -522,6 +529,49 @@ Page({
   onTapQuickPrompt(e) {
     const text = e.currentTarget.dataset.prompt || "";
     this.setData({ query: text });
+  },
+
+  async onWechatLogin() {
+    if (this.data.loginLoading) return;
+    if (this.identity && this.identity.kind === "authenticated") {
+      wx.showToast({ title: "当前已微信登录", icon: "none" });
+      return;
+    }
+
+    this.setData({ loginLoading: true });
+    try {
+      const loginResult = await new Promise((resolve, reject) => {
+        wx.login({
+          success: (res) => {
+            if (res && res.code) {
+              resolve(res);
+              return;
+            }
+            reject(new Error("wx.login 未返回 code"));
+          },
+          fail: (err) => reject(new Error((err && err.errMsg) || "wx.login 失败")),
+        });
+      });
+
+      const resp = await wechatLogin({
+        code: loginResult.code,
+        anonymousId: this.identity ? this.identity.anonymousId : undefined,
+      });
+      if (!resp || !resp.ok || !resp.userId) {
+        throw new Error((resp && resp.error) || "微信登录失败，请稍后再试");
+      }
+
+      this.identity = saveAuthenticatedIdentity(resp.userId, resp.anonymousId || (this.identity && this.identity.anonymousId));
+      this.refreshIdentityView();
+      wx.showToast({ title: "微信登录成功", icon: "success" });
+    } catch (err) {
+      wx.showToast({
+        title: err && err.message ? err.message : "微信登录失败",
+        icon: "none",
+      });
+    } finally {
+      this.setData({ loginLoading: false });
+    }
   },
 
   async onTogglePreferNearby() {

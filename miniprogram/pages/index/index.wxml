@@ -5,7 +5,10 @@
         <view class="title">成电吃什么</view>
         <view class="subtitle">校园美食推荐 · 小程序版</view>
       </view>
-      <view class="identity">{{identityLabel}}</view>
+      <view class="identity-wrap">
+        <view class="identity">{{identityLabel}}</view>
+        <button class="ghost-btn login-btn" loading="{{loginLoading}}" bindtap="onWechatLogin">微信登录</button>
+      </view>
     </view>
     <view class="summary">{{summary || "输入你的需求，获取校园美食推荐。"}}</view>
   </view>
@@ -51,11 +54,15 @@
         <view class="quick-item" bindtap="onTapQuickPrompt" data-prompt="{{item}}">{{item}}</view>
       </block>
     </view>
-    <view class="location-row">
+    <view class="nearby-card">
+      <view class="nearby-info">
+        <text class="nearby-title">附近优先</text>
+        <text wx:if="{{preferNearby}}" class="nearby-sub">已定位：{{locationLabel}}</text>
+        <text wx:else class="nearby-sub">定位状态：{{locationLabel}}</text>
+      </view>
       <button class="ghost-btn nearby-btn {{preferNearby?'nearby-active':''}}" loading="{{locationLoading}}" bindtap="onTogglePreferNearby">
-        {{preferNearby ? "附近优先：已开启" : "附近优先（定位）"}}
+        {{preferNearby ? "已开启" : "开启定位"}}
       </button>
-      <text class="location-text">{{locationLabel}}</text>
     </view>
     <view wx:if="{{locationError}}" class="location-error">{{locationError}}</view>
     <view class="action-row">

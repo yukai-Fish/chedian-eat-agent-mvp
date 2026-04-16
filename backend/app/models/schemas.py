@@ -202,3 +202,17 @@ class StoreDetailResponse(BaseModel):
     found: bool
     store: Optional[StoreDetailData] = None
     message: Optional[str] = None
+
+
+class WechatLoginRequest(BaseModel):
+    code: str = Field(..., min_length=1, max_length=200)
+    anonymousId: Optional[str] = Field(default=None, max_length=80)
+
+
+class WechatLoginResponse(BaseModel):
+    ok: bool
+    provider: str = "wechat_miniprogram"
+    userId: Optional[str] = None
+    anonymousId: Optional[str] = None
+    message: Optional[str] = None
+    error: Optional[str] = None

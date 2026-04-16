@@ -38,6 +38,25 @@ function getCurrentIdentity() {
   };
 }
 
+function saveAuthenticatedIdentity(userId, anonymousId) {
+  const stored = normalize(wx.getStorageSync(STORAGE_KEY)) || {
+    anonymousId: randomId(),
+    userId: null,
+  };
+  const next = {
+    anonymousId: String(anonymousId || stored.anonymousId || randomId()).trim(),
+    userId: String(userId || "").trim() || null,
+  };
+  wx.setStorageSync(STORAGE_KEY, next);
+  return {
+    anonymousId: next.anonymousId,
+    userId: next.userId,
+    uid: next.userId || next.anonymousId,
+    kind: next.userId ? "authenticated" : "anonymous",
+  };
+}
+
 module.exports = {
   getCurrentIdentity,
+  saveAuthenticatedIdentity,
 };

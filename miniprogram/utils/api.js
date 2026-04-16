@@ -76,11 +76,20 @@ function logRankingClick(payload) {
   });
 }
 
+function wechatLogin(payload) {
+  return request({
+    url: "/api/auth/wechat-login",
+    method: "POST",
+    data: payload,
+  });
+}
+
 module.exports = {
   fetchRecommendations,
   submitFeedback,
   fetchStoreDetail,
   fetchTodayRankings,
   logRankingClick,
+  wechatLogin,
   API_BASE_URL,
 };
