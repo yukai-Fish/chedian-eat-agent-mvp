@@ -39,9 +39,31 @@ def _headers() -> Dict[str, str]:
     }
 
 
-def _candidate_shops(query: str, limit: int = 30) -> List[Dict[str, Any]]:
+def _normalize_name(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    if not text:
+        return ""
+    text = re.sub(r"[\s·•\-_()/（）【】\[\]]+", "", text)
+    return text
+
+
+def _is_excluded(name: str, excluded_names: set[str]) -> bool:
+    normalized = _normalize_name(name)
+    if not normalized or not excluded_names:
+        return False
+    if normalized in excluded_names:
+        return True
+    return any(normalized in blocked or blocked in normalized for blocked in excluded_names)
+
+
+def _candidate_shops(query: str, limit: int = 30, excluded_names: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     slots = parse_query(query)
     shops = fetch_active_shops()
+    excluded = {
+        _normalize_name(name)
+        for name in (excluded_names or [])
+        if _normalize_name(name)
+    }
 
     campus = (slots.location or "").strip()
     budget = slots.budget_max
@@ -51,6 +73,9 @@ def _candidate_shops(query: str, limit: int = 30) -> List[Dict[str, Any]]:
 
     scored: List[Tuple[float, Dict[str, Any]]] = []
     for item in shops:
+        if _is_excluded(str(item.get("name", "")), excluded):
+            continue
+
         score = 0.0
         if campus and campus in str(item.get("campus", "")):
             score += 3.0
@@ -188,6 +213,7 @@ def ask_spark_local_recommend(
     query: str,
     uid: Optional[str] = None,
     user_profile: Optional[Dict[str, Any]] = None,
+    exclude_store_names: Optional[List[str]] = None,
     timeout_seconds: Optional[float] = None,
 ) -> Dict[str, Any]:
     auth, auth_err = _build_auth_header()
@@ -202,7 +228,7 @@ def ask_spark_local_recommend(
     if thinking_mode not in {"enabled", "disabled", "auto"}:
         thinking_mode = "disabled"
 
-    shops = _candidate_shops(query, limit=30)
+    shops = _candidate_shops(query, limit=30, excluded_names=exclude_store_names)
     payload = {
         "model": model,
         "messages": _messages(query, shops, user_profile),
@@ -300,6 +326,7 @@ def ask_spark_local_recommend(
             "usage": parsed.get("usage"),
             "model": model,
             "profile_summary": str((user_profile or {}).get("summary") or ""),
+            "excluded_store_names": exclude_store_names or [],
             "upstream": parsed,
         },
     }

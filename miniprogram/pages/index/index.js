@@ -39,6 +39,26 @@ function buildRefinedQuery(query, dislikedNames) {
   return `${base}。换个口味，尽量和上一批不同${excludeHint}。`;
 }
 
+function pickCardNames(cards) {
+  return (Array.isArray(cards) ? cards : [])
+    .map((card) => String((card && card.name) || "").trim())
+    .filter(Boolean);
+}
+
+function mergeDislikedNames(...nameLists) {
+  const seen = new Set();
+  const merged = [];
+  nameLists.forEach((list) => {
+    (Array.isArray(list) ? list : []).forEach((name) => {
+      const key = String(name || "").trim();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      merged.push(key);
+    });
+  });
+  return merged.slice(-MAX_DISLIKED);
+}
+
 function parseIntervals(openHoursText) {
   const text = String(openHoursText || "").trim();
   if (!text || text === "无") return { unknown: true, allDay: false, intervals: [] };
@@ -280,7 +300,7 @@ Page({
       this.setData({ dislikedNames: [] });
     }
 
-    const dislikedNames = this.data.dislikedNames || [];
+    const dislikedNames = Array.isArray(options.dislikedNames) ? options.dislikedNames : (this.data.dislikedNames || []);
     const requestQuery = forceRefine ? buildRefinedQuery(cleanQuery, dislikedNames) : cleanQuery;
 
     this.setData({
@@ -294,6 +314,7 @@ Page({
         anonymousId: this.identity.anonymousId,
         userId: this.identity.userId || undefined,
         uid: this.identity.uid,
+        excludeStoreNames: dislikedNames,
         history: [],
       });
 
@@ -312,7 +333,7 @@ Page({
 
       const parsed = parseRecommendationAnswer(result.answer || "");
       const rawCards = parsed.cards || [];
-      const cards = filterDisliked(rawCards, this.data.dislikedNames);
+      const cards = filterDisliked(rawCards, dislikedNames);
       const summarySuffix = forceRefine ? "（已按你的反馈换口味）" : "";
 
       this.setData({
@@ -399,7 +420,22 @@ Page({
   async onRefineTaste() {
     const query = (this.data.query || "").trim();
     if (!query || this.data.loading) return;
-    await this.runRecommendation(query, { forceRefine: true });
+    const previousVisible = pickCardNames(this.data.visibleCards);
+    const nextDisliked = mergeDislikedNames(this.data.dislikedNames, previousVisible);
+    this.setData({ dislikedNames: nextDisliked });
+
+    const ok = await this.runRecommendation(query, {
+      forceRefine: true,
+      dislikedNames: nextDisliked,
+    });
+
+    if (!ok) return;
+
+    const currentVisible = pickCardNames(this.data.visibleCards);
+    const overlap = currentVisible.filter((name) => previousVisible.includes(name));
+    if (overlap.length > 0 && currentVisible.length > 0) {
+      wx.showToast({ title: "已尽量换口味，可再点一次继续换", icon: "none" });
+    }
   },
 
   async onTapFollowUp(e) {

@@ -28,6 +28,7 @@ proxy_router = APIRouter()
 def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendResponse:
     resolved_uid = req.uid or req.userId or req.anonymousId
     provider = os.getenv("RECOMMEND_PROVIDER", "workflow").strip().lower()
+    excluded_names = [str(name).strip() for name in (req.excludeStoreNames or []) if str(name).strip()][:20]
     profile = build_iterative_profile(
         uid=req.uid,
         anonymous_id=req.anonymousId,
@@ -51,6 +52,8 @@ def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendRe
         if profile.get("hasProfile"):
             merged_parameters["AGENT_USER_PROFILE_SUMMARY"] = profile.get("summary")
             merged_parameters["AGENT_USER_PROFILE_JSON"] = json.dumps(profile.get("signals", {}), ensure_ascii=False)
+        if excluded_names:
+            merged_parameters["AGENT_EXCLUDED_STORE_NAMES"] = json.dumps(excluded_names, ensure_ascii=False)
 
         result = ask_workflow(
             query=req.query,
@@ -66,6 +69,7 @@ def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendRe
         query=req.query,
         uid=resolved_uid,
         user_profile=profile if profile.get("hasProfile") else None,
+        exclude_store_names=excluded_names,
     )
     return WorkflowRecommendResponse(**result)
 
