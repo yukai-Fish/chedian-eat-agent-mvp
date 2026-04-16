@@ -23,7 +23,7 @@
       <text>{{rankingsError}}</text>
       <text class="ranking-retry" bindtap="onRetryRankings">重试</text>
     </view>
-    <view wx:if="{{!rankingsLoading && !rankingsError && rankings.length===0}}" class="ranking-state">今天还没有足够数据，快来贡献第一条点击。</view>
+    <view wx:if="{{rankingsReady && !rankingsLoading && !rankingsError && rankings.length===0}}" class="ranking-state">今天还没有足够数据，快来贡献第一条点击。</view>
     <block wx:for="{{rankings}}" wx:key="shop_id">
       <view class="ranking-item" bindtap="onTapRankingItem" data-name="{{item.name}}" data-shop-id="{{item.shop_id}}">
         <view class="ranking-left">
@@ -66,7 +66,7 @@
     </view>
     <view wx:if="{{locationError}}" class="location-error">{{locationError}}</view>
     <view class="action-row">
-      <button class="ghost-btn feedback-btn" bindtap="openFeedback">✦ 反馈新店 / 用餐体验</button>
+      <button class="ghost-btn feedback-btn" bindtap="openFeedback">反馈内容</button>
       <button class="gold-btn submit-btn" loading="{{loading}}" bindtap="onSubmitQuery">发送</button>
     </view>
     <view wx:if="{{loading}}" class="loading-tip">正在生成推荐，通常需要 10-40 秒，请稍候…</view>
@@ -159,7 +159,7 @@
   </view>
 
   <view wx:if="{{quickDiningOpen}}" class="mask" bindtap="closeQuickDining">
-    <view class="modal quick-modal glass-card" bindtap="stopTap">
+    <view class="modal quick-modal glass-card" catchtap="stopTap">
       <view class="modal-head">
         <text class="modal-title">吃后反馈</text>
         <text class="close" bindtap="closeQuickDining">✕</text>
@@ -178,7 +178,7 @@
   </view>
 
   <view wx:if="{{feedbackOpen}}" class="mask" bindtap="onTapFeedbackMask">
-    <view class="modal glass-card" bindtap="stopTap">
+    <view class="modal glass-card" catchtap="stopTap">
       <view class="modal-head">
         <text class="modal-title">美食反馈</text>
         <text class="close" bindtap="closeFeedback">✕</text>

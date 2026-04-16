@@ -311,6 +311,15 @@
   height: 72rpx;
   line-height: 72rpx;
   border-radius: 18rpx;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.submit-btn::after {
+  border: none;
 }
 
 .error {

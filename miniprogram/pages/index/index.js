@@ -191,6 +191,7 @@ Page({
     locationLabel: "未定位",
     locationContext: null,
     rankingsLoading: false,
+    rankingsReady: false,
     rankingsError: "",
     rankingsUpdatedAt: "",
     rankings: [],
@@ -419,6 +420,7 @@ Page({
       const items = Array.isArray(res.items) ? res.items : [];
       this.setData({
         rankingsLoading: false,
+        rankingsReady: true,
         rankings: items.slice(0, 5),
         rankingsUpdatedAt: res.updated_at || "",
       });
@@ -429,6 +431,7 @@ Page({
         : "热度榜加载失败，请稍后重试";
       this.setData({
         rankingsLoading: false,
+        rankingsReady: true,
         rankingsError: hint,
       });
     }
