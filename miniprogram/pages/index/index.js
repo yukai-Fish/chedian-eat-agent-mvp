@@ -431,10 +431,28 @@ Page({
 
     if (!ok) return;
 
-    const currentVisible = pickCardNames(this.data.visibleCards);
-    const overlap = currentVisible.filter((name) => previousVisible.includes(name));
-    if (overlap.length > 0 && currentVisible.length > 0) {
+    let currentVisible = pickCardNames(this.data.visibleCards);
+    let overlap = currentVisible.filter((name) => previousVisible.includes(name));
+    if (overlap.length === 0 || currentVisible.length === 0) return;
+
+    // Retry once with an expanded exclusion set so "换口味" is more visibly different.
+    const retryDisliked = mergeDislikedNames(nextDisliked, currentVisible);
+    if (retryDisliked.length <= nextDisliked.length) {
       wx.showToast({ title: "已尽量换口味，可再点一次继续换", icon: "none" });
+      return;
+    }
+
+    this.setData({ dislikedNames: retryDisliked });
+    const retried = await this.runRecommendation(query, {
+      forceRefine: true,
+      dislikedNames: retryDisliked,
+    });
+    if (!retried) return;
+
+    currentVisible = pickCardNames(this.data.visibleCards);
+    overlap = currentVisible.filter((name) => previousVisible.includes(name));
+    if (overlap.length > 0 && currentVisible.length > 0) {
+      wx.showToast({ title: "候选池有限，已尽量换口味", icon: "none" });
     }
   },
 
