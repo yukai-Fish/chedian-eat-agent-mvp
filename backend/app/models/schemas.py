@@ -116,6 +116,23 @@ class EventAckResponse(BaseModel):
     ok: bool = True
 
 
+class UsageTrackEventRequest(BaseModel):
+    eventType: Literal[
+        "profile_card_click",
+        "profile_save",
+        "preference_change",
+        "recommendation_conversion",
+    ]
+    uid: Optional[str] = None
+    anonymousId: Optional[str] = None
+    userId: Optional[str] = None
+    queryText: Optional[str] = Field(default=None, max_length=300)
+    shopId: Optional[str] = Field(default=None, max_length=120)
+    shopName: Optional[str] = Field(default=None, max_length=120)
+    source: Optional[str] = Field(default="miniprogram", max_length=60)
+    meta: Optional[dict[str, Any]] = None
+
+
 class AdSlotPublicItem(BaseModel):
     id: str
     title: str
@@ -227,6 +244,30 @@ class ProfileDataResponse(BaseModel):
     linkedHistoryEvents: int = 0
 
 
+class ProfileSettingsData(BaseModel):
+    campus: str = ""
+    tasteTags: List[str] = Field(default_factory=list)
+    dislikes: List[str] = Field(default_factory=list)
+    budgetPreference: str = ""
+    updatedAt: Optional[str] = None
+
+
+class ProfileSettingsResponse(BaseModel):
+    ok: bool = True
+    profile: ProfileSettingsData
+    source: str = "backend"
+
+
+class ProfileSettingsUpsertRequest(BaseModel):
+    userId: str = Field(..., min_length=1, max_length=120)
+    anonymousId: Optional[str] = Field(default=None, max_length=80)
+    campus: Optional[str] = Field(default=None, max_length=40)
+    tasteTags: Optional[List[str]] = Field(default=None, max_length=20)
+    dislikes: Optional[List[str]] = Field(default=None, max_length=20)
+    budgetPreference: Optional[str] = Field(default=None, max_length=40)
+    source: Optional[str] = Field(default="miniprogram_profile", max_length=60)
+
+
 class FeedbackRequest(BaseModel):
     feedbackType: str = Field(..., pattern="^(new_store|dining_feedback)$")
     storeName: str = Field(..., min_length=1, max_length=80)
@@ -314,5 +355,16 @@ class WechatLoginResponse(BaseModel):
     provider: str = "wechat_miniprogram"
     userId: Optional[str] = None
     anonymousId: Optional[str] = None
+    accessToken: Optional[str] = None
+    tokenType: Optional[str] = None
+    expiresIn: Optional[int] = None
+    expiresAt: Optional[str] = None
     message: Optional[str] = None
     error: Optional[str] = None
+
+
+class AuthMeResponse(BaseModel):
+    ok: bool = True
+    provider: str = "wechat_miniprogram"
+    userId: str
+    expiresAt: Optional[str] = None

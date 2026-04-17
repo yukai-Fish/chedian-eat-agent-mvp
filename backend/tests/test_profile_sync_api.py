@@ -3,11 +3,17 @@ import sqlite3
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.services.auth_token_service import issue_access_token
 from app.services.shop_repository import DB_PATH, ensure_database
 from app.services.usage_events import log_query_event
 
 
 client = TestClient(app)
+
+
+def _auth_headers(user_id: str) -> dict:
+    token = issue_access_token(user_id=user_id)["accessToken"]
+    return {"Authorization": f"Bearer {token}"}
 
 
 def _cleanup_user_data(user_id: str, anonymous_id: str) -> None:
@@ -39,6 +45,7 @@ def test_profile_sync_local_migrates_favorites_and_history() -> None:
             "queryHistory": ["history-a", "history-b"],
             "source": "test-sync",
         },
+        headers=_auth_headers(user_id),
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -48,7 +55,7 @@ def test_profile_sync_local_migrates_favorites_and_history() -> None:
     assert body["linkedHistoryEvents"] >= 1
     assert "custom-favorite-shop" in body["favorites"]
 
-    data_resp = client.get("/api/profile/data", params={"user_id": user_id})
+    data_resp = client.get("/api/profile/data", params={"user_id": user_id}, headers=_auth_headers(user_id))
     assert data_resp.status_code == 200
     data_body = data_resp.json()
     assert data_body["ok"] is True

@@ -2,18 +2,24 @@ import json
 import os
 from datetime import date
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Header, HTTPException, UploadFile
 
+from app.api.auth import require_authenticated_user
 from app.models.schemas import (
+    AuthMeResponse,
     AdClickEventRequest,
     AdSlotsResponse,
     EventAckResponse,
     FeedbackRequest,
     FeedbackResponse,
     ProfileDataResponse,
+    ProfileSettingsData,
+    ProfileSettingsResponse,
+    ProfileSettingsUpsertRequest,
     ProfileSyncRequest,
     StoreDetailResponse,
     StoreNameSuggestionsResponse,
+    UsageTrackEventRequest,
     WechatLoginRequest,
     WechatLoginResponse,
     WorkflowRecommendRequest,
@@ -24,10 +30,16 @@ from app.models.schemas import (
 from app.services.ad_repository import get_ads_contact_wechat, list_public_ad_slots, log_ad_click_event
 from app.services.favorites_repository import add_favorite, list_favorites
 from app.services.feedback_repository import save_feedback, suggest_store_names
+from app.services.profile_settings_repository import get_profile_settings, upsert_profile_settings
 from app.services.shop_repository import fetch_store_detail_by_name, resolve_shop_identity_by_name
 from app.services.spark_local_recommend_service import ask_spark_local_recommend
 from app.services.user_profile import build_iterative_profile
-from app.services.usage_events import bind_anonymous_events_to_user, list_recent_query_history, log_query_event
+from app.services.usage_events import (
+    bind_anonymous_events_to_user,
+    list_recent_query_history,
+    log_query_event,
+    log_usage_event,
+)
 from app.services.wechat_auth_service import login_with_wechat_code
 from app.services.xfyun_workflow_service import ask_workflow, resume_workflow, upload_workflow_file
 
@@ -66,6 +78,15 @@ def _favorite_names_for_user(user_id: str, *, limit: int = 100) -> list[str]:
     return names
 
 
+def _clean_optional_text(value: str | None, *, max_length: int) -> str | None:
+    if value is None:
+        return None
+    text = str(value or "").strip()
+    if len(text) > max_length:
+        text = text[:max_length]
+    return text
+
+
 @proxy_router.post("/recommend", response_model=WorkflowRecommendResponse)
 def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendResponse:
     resolved_uid = req.uid or req.userId or req.anonymousId
@@ -86,6 +107,28 @@ def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendRe
         anonymous_id=req.anonymousId,
         user_id=req.userId,
     )
+    preference_profile = None
+    if req.userId:
+        try:
+            pref_data = get_profile_settings(user_id=req.userId)
+            preference_profile = {
+                "campus": str(pref_data.get("campus") or "").strip(),
+                "tasteTags": [
+                    str(item or "").strip()
+                    for item in (pref_data.get("taste_tags") or [])
+                    if str(item or "").strip()
+                ],
+                "dislikes": [
+                    str(item or "").strip()
+                    for item in (pref_data.get("dislikes") or [])
+                    if str(item or "").strip()
+                ],
+                "budgetPreference": str(pref_data.get("budget_preference") or "").strip(),
+                "updatedAt": str(pref_data.get("updated_at") or "").strip() or None,
+            }
+        except Exception:
+            # Keep recommendation available when profile settings are temporarily unavailable.
+            preference_profile = None
 
     log_query_event(
         req.query,
@@ -96,6 +139,8 @@ def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendRe
         meta={
             "profile_applied": profile.get("hasProfile", False),
             "profile_stats": profile.get("stats", {}),
+            "preference_profile_applied": isinstance(preference_profile, dict),
+            "preference_fields": sorted(list((preference_profile or {}).keys())) if isinstance(preference_profile, dict) else [],
         },
     )
 
@@ -104,6 +149,8 @@ def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendRe
         if profile.get("hasProfile"):
             merged_parameters["AGENT_USER_PROFILE_SUMMARY"] = profile.get("summary")
             merged_parameters["AGENT_USER_PROFILE_JSON"] = json.dumps(profile.get("signals", {}), ensure_ascii=False)
+        if isinstance(preference_profile, dict):
+            merged_parameters["AGENT_USER_PREFERENCE_PROFILE_JSON"] = json.dumps(preference_profile, ensure_ascii=False)
         if excluded_names:
             merged_parameters["AGENT_EXCLUDED_STORE_NAMES"] = json.dumps(excluded_names, ensure_ascii=False)
         if nearby_context:
@@ -124,6 +171,7 @@ def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendRe
         query=req.query,
         uid=resolved_uid,
         user_profile=profile if profile.get("hasProfile") else None,
+        preference_profile=preference_profile if isinstance(preference_profile, dict) else None,
         exclude_store_names=excluded_names,
         nearby_context=nearby_context,
     )
@@ -137,6 +185,19 @@ def wechat_login_proxy(req: WechatLoginRequest) -> WechatLoginResponse:
         anonymous_id=req.anonymousId,
     )
     return WechatLoginResponse(**result)
+
+
+@proxy_router.get("/auth/me", response_model=AuthMeResponse)
+def auth_me_proxy(
+    authorization: str | None = Header(default=None, alias="Authorization"),
+) -> AuthMeResponse:
+    user_id = require_authenticated_user(authorization=authorization)
+    return AuthMeResponse(
+        ok=True,
+        provider="wechat_miniprogram",
+        userId=user_id,
+        expiresAt=None,
+    )
 
 
 @proxy_router.get("/ads/slots", response_model=AdSlotsResponse)
@@ -161,11 +222,31 @@ def ad_click_proxy(req: AdClickEventRequest) -> EventAckResponse:
     return EventAckResponse(ok=True)
 
 
+@proxy_router.post("/events/track", response_model=EventAckResponse)
+def usage_track_proxy(req: UsageTrackEventRequest) -> EventAckResponse:
+    log_usage_event(
+        event_type=req.eventType,
+        uid=(req.uid or "").strip() or None,
+        anonymous_id=(req.anonymousId or "").strip() or None,
+        user_id=(req.userId or "").strip() or None,
+        query_text=(req.queryText or "").strip() or None,
+        shop_id=(req.shopId or "").strip() or None,
+        shop_name=(req.shopName or "").strip() or None,
+        source=(req.source or "miniprogram").strip() or "miniprogram",
+        meta=req.meta or {},
+    )
+    return EventAckResponse(ok=True)
+
+
 @proxy_router.get("/profile/data", response_model=ProfileDataResponse)
-def profile_data_proxy(user_id: str = "") -> ProfileDataResponse:
+def profile_data_proxy(
+    user_id: str = "",
+    authorization: str | None = Header(default=None, alias="Authorization"),
+) -> ProfileDataResponse:
     uid = user_id.strip()
     if not uid:
         raise HTTPException(status_code=400, detail="user_id is required.")
+    require_authenticated_user(authorization=authorization, expected_user_id=uid)
     return ProfileDataResponse(
         ok=True,
         favorites=_favorite_names_for_user(uid, limit=100),
@@ -174,8 +255,12 @@ def profile_data_proxy(user_id: str = "") -> ProfileDataResponse:
 
 
 @proxy_router.post("/profile/sync-local", response_model=ProfileDataResponse)
-def profile_sync_local_proxy(req: ProfileSyncRequest) -> ProfileDataResponse:
+def profile_sync_local_proxy(
+    req: ProfileSyncRequest,
+    authorization: str | None = Header(default=None, alias="Authorization"),
+) -> ProfileDataResponse:
     uid = req.userId.strip()
+    require_authenticated_user(authorization=authorization, expected_user_id=uid)
     anon = (req.anonymousId or "").strip() or None
     source = (req.source or "miniprogram").strip() or "miniprogram"
 
@@ -223,6 +308,66 @@ def profile_sync_local_proxy(req: ProfileSyncRequest) -> ProfileDataResponse:
         migratedFavorites=migrated_favorites,
         migratedHistory=migrated_history,
         linkedHistoryEvents=linked_count,
+    )
+
+
+@proxy_router.get("/profile/settings", response_model=ProfileSettingsResponse)
+def profile_settings_get_proxy(
+    user_id: str = "",
+    authorization: str | None = Header(default=None, alias="Authorization"),
+) -> ProfileSettingsResponse:
+    uid = user_id.strip()
+    if not uid:
+        raise HTTPException(status_code=400, detail="user_id is required.")
+    require_authenticated_user(authorization=authorization, expected_user_id=uid)
+    data = get_profile_settings(user_id=uid)
+    return ProfileSettingsResponse(
+        ok=True,
+        profile=ProfileSettingsData(
+            campus=str(data.get("campus") or "").strip(),
+            tasteTags=[str(item or "").strip() for item in (data.get("taste_tags") or []) if str(item or "").strip()],
+            dislikes=[str(item or "").strip() for item in (data.get("dislikes") or []) if str(item or "").strip()],
+            budgetPreference=str(data.get("budget_preference") or "").strip(),
+            updatedAt=str(data.get("updated_at") or "").strip() or None,
+        ),
+        source="backend",
+    )
+
+
+@proxy_router.post("/profile/settings", response_model=ProfileSettingsResponse)
+def profile_settings_upsert_proxy(
+    req: ProfileSettingsUpsertRequest,
+    authorization: str | None = Header(default=None, alias="Authorization"),
+) -> ProfileSettingsResponse:
+    uid = req.userId.strip()
+    if not uid:
+        raise HTTPException(status_code=400, detail="userId is required.")
+    require_authenticated_user(authorization=authorization, expected_user_id=uid)
+
+    normalized_taste_tags = (
+        _clean_text_list(req.tasteTags, limit=10, max_length=30) if req.tasteTags is not None else None
+    )
+    normalized_dislikes = _clean_text_list(req.dislikes, limit=10, max_length=30) if req.dislikes is not None else None
+
+    data = upsert_profile_settings(
+        user_id=uid,
+        anonymous_id=(req.anonymousId or "").strip() or None,
+        campus=_clean_optional_text(req.campus, max_length=40),
+        taste_tags=normalized_taste_tags,
+        dislikes=normalized_dislikes,
+        budget_preference=_clean_optional_text(req.budgetPreference, max_length=40),
+        source=(req.source or "miniprogram_profile").strip() or "miniprogram_profile",
+    )
+    return ProfileSettingsResponse(
+        ok=True,
+        profile=ProfileSettingsData(
+            campus=str(data.get("campus") or "").strip(),
+            tasteTags=[str(item or "").strip() for item in (data.get("taste_tags") or []) if str(item or "").strip()],
+            dislikes=[str(item or "").strip() for item in (data.get("dislikes") or []) if str(item or "").strip()],
+            budgetPreference=str(data.get("budget_preference") or "").strip(),
+            updatedAt=str(data.get("updated_at") or "").strip() or None,
+        ),
+        source="backend",
     )
 
 

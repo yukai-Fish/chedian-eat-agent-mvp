@@ -6,6 +6,8 @@ from typing import Any, Dict, Optional
 
 import httpx
 
+from app.services.auth_token_service import issue_access_token
+
 
 def _user_id_from_openid(openid: str) -> str:
     salt = os.getenv("WECHAT_USER_ID_SALT", "chedian-wx-user-v1")
@@ -73,10 +75,12 @@ def login_with_wechat_code(*, code: str, anonymous_id: Optional[str] = None) -> 
             "anonymousId": _normalize_anonymous_id(anonymous_id),
         }
 
+    user_id = _user_id_from_openid(openid)
     return {
         "ok": True,
         "provider": "wechat_miniprogram",
-        "userId": _user_id_from_openid(openid),
+        "userId": user_id,
         "anonymousId": _normalize_anonymous_id(anonymous_id),
         "message": "微信登录成功",
+        **issue_access_token(user_id=user_id),
     }

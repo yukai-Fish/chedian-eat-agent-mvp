@@ -3,6 +3,7 @@ import os
 
 from fastapi import APIRouter, Header, HTTPException
 
+from app.api.auth import require_authenticated_user
 from app.models.schemas import (
     AdAdminAckResponse,
     AdAdminSlotsResponse,
@@ -22,6 +23,7 @@ from app.models.schemas import (
     RecommendResponse,
     StoreDetailResponse,
     StoreNameSuggestionsResponse,
+    UsageTrackEventRequest,
 )
 from app.services.ad_repository import (
     get_ads_contact_wechat,
@@ -38,7 +40,7 @@ from app.services.hot_ranking import get_today_hot_rankings
 from app.services.parser import parse_query
 from app.services.recommender import recommend
 from app.services.shop_repository import count_shops, fetch_store_detail_by_name, resolve_shop_identity_by_name
-from app.services.usage_events import log_query_event, log_ranking_click_event
+from app.services.usage_events import log_query_event, log_ranking_click_event, log_usage_event
 
 
 router = APIRouter()
@@ -113,6 +115,22 @@ def ad_click_event(req: AdClickEventRequest) -> EventAckResponse:
     return EventAckResponse(ok=True)
 
 
+@router.post("/events/track", response_model=EventAckResponse)
+def usage_track_event(req: UsageTrackEventRequest) -> EventAckResponse:
+    log_usage_event(
+        event_type=req.eventType,
+        uid=(req.uid or "").strip() or None,
+        anonymous_id=(req.anonymousId or "").strip() or None,
+        user_id=(req.userId or "").strip() or None,
+        query_text=(req.queryText or "").strip() or None,
+        shop_id=(req.shopId or "").strip() or None,
+        shop_name=(req.shopName or "").strip() or None,
+        source=(req.source or "api_v1").strip() or "api_v1",
+        meta=req.meta or {},
+    )
+    return EventAckResponse(ok=True)
+
+
 @router.get("/ads/admin/slots", response_model=AdAdminSlotsResponse)
 def ad_slots_admin(
     days: int = 30,
@@ -161,16 +179,24 @@ def ad_slots_admin_toggle(
 
 
 @router.get("/favorites", response_model=FavoriteListResponse)
-def get_favorites(user_id: str) -> FavoriteListResponse:
+def get_favorites(
+    user_id: str,
+    authorization: str | None = Header(default=None, alias="Authorization"),
+) -> FavoriteListResponse:
     uid = user_id.strip()
     if not uid:
         raise HTTPException(status_code=400, detail="user_id is required.")
+    require_authenticated_user(authorization=authorization, expected_user_id=uid)
     items = list_favorites(user_id=uid)
     return FavoriteListResponse(items=items)
 
 
 @router.post("/favorites", response_model=EventAckResponse)
-def add_favorite_api(req: FavoriteWriteRequest) -> EventAckResponse:
+def add_favorite_api(
+    req: FavoriteWriteRequest,
+    authorization: str | None = Header(default=None, alias="Authorization"),
+) -> EventAckResponse:
+    require_authenticated_user(authorization=authorization, expected_user_id=req.userId.strip())
     raw_shop_id = req.shopId.strip()
     raw_shop_name = (req.shopName or "").strip()
     matched = resolve_shop_identity_by_name(raw_shop_name or raw_shop_id)
@@ -188,8 +214,12 @@ def add_favorite_api(req: FavoriteWriteRequest) -> EventAckResponse:
 
 
 @router.delete("/favorites", response_model=EventAckResponse)
-def remove_favorite_api(req: FavoriteRemoveRequest) -> EventAckResponse:
+def remove_favorite_api(
+    req: FavoriteRemoveRequest,
+    authorization: str | None = Header(default=None, alias="Authorization"),
+) -> EventAckResponse:
     uid = req.userId.strip()
+    require_authenticated_user(authorization=authorization, expected_user_id=uid)
     raw_shop_id = req.shopId.strip()
     matched = resolve_shop_identity_by_name(raw_shop_id)
     final_shop_id = str((matched or {}).get("id") or raw_shop_id).strip()
