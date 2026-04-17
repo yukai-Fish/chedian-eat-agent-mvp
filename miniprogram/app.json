@@ -25,15 +25,21 @@
     "list": [
       {
         "pagePath": "pages/index/index",
-        "text": "问询"
+        "text": "问询",
+        "iconPath": "assets/tabbar/ginkgo-gold.png",
+        "selectedIconPath": "assets/tabbar/ginkgo-gold.png"
       },
       {
         "pagePath": "pages/ads/index",
-        "text": "商家推荐"
+        "text": "商家推荐",
+        "iconPath": "assets/tabbar/xiaohui.png",
+        "selectedIconPath": "assets/tabbar/xiaohui.png"
       },
       {
         "pagePath": "pages/profile/index",
-        "text": "我的"
+        "text": "我的",
+        "iconPath": "assets/tabbar/xiaohui.png",
+        "selectedIconPath": "assets/tabbar/xiaohui.png"
       }
     ]
   },

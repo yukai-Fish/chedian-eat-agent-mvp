@@ -1,20 +1,36 @@
-﻿from datetime import date
+from datetime import date
+import os
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 
 from app.models.schemas import (
-    FeedbackRequest,
-    FeedbackResponse,
+    AdAdminAckResponse,
+    AdAdminSlotsResponse,
+    AdAdminToggleRequest,
+    AdAdminUpsertRequest,
+    AdClickEventRequest,
+    AdSlotsResponse,
     EventAckResponse,
     FavoriteListResponse,
     FavoriteRemoveRequest,
     FavoriteWriteRequest,
+    FeedbackRequest,
+    FeedbackResponse,
     HotRankingResponse,
     RankingClickEventRequest,
     RecommendRequest,
     RecommendResponse,
-    StoreNameSuggestionsResponse,
     StoreDetailResponse,
+    StoreNameSuggestionsResponse,
+)
+from app.services.ad_repository import (
+    get_ads_contact_wechat,
+    list_admin_ad_slots,
+    list_public_ad_slots,
+    log_ad_click_event,
+    set_ad_slot_active,
+    set_ads_contact_wechat,
+    upsert_ad_slots,
 )
 from app.services.favorites_repository import add_favorite, list_favorites, remove_favorite
 from app.services.feedback_repository import save_feedback, suggest_store_names
@@ -26,6 +42,15 @@ from app.services.usage_events import log_query_event, log_ranking_click_event
 
 
 router = APIRouter()
+
+
+def _require_ads_admin_token(*, header_token: str | None, query_token: str | None) -> None:
+    expected = os.getenv("ADS_ADMIN_TOKEN", "").strip()
+    if not expected:
+        return
+    provided = str(header_token or query_token or "").strip()
+    if provided != expected:
+        raise HTTPException(status_code=401, detail="invalid admin token")
 
 
 @router.get("/health")
@@ -64,6 +89,75 @@ def ranking_click_event(req: RankingClickEventRequest) -> EventAckResponse:
         source="web-ranking",
     )
     return EventAckResponse(ok=True)
+
+
+@router.get("/ads/slots", response_model=AdSlotsResponse)
+def ad_slots_public(limit: int = 10) -> AdSlotsResponse:
+    slots = list_public_ad_slots(limit=limit)
+    return AdSlotsResponse(
+        updatedAt=date.today().isoformat(),
+        contactWechat=get_ads_contact_wechat(),
+        items=slots,
+    )
+
+
+@router.post("/events/ad-click", response_model=EventAckResponse)
+def ad_click_event(req: AdClickEventRequest) -> EventAckResponse:
+    log_ad_click_event(
+        slot_id=req.slotId,
+        uid=req.uid,
+        anonymous_id=req.anonymousId,
+        user_id=req.userId,
+        source=(req.source or "miniprogram_ads").strip() or "miniprogram_ads",
+    )
+    return EventAckResponse(ok=True)
+
+
+@router.get("/ads/admin/slots", response_model=AdAdminSlotsResponse)
+def ad_slots_admin(
+    days: int = 30,
+    token: str = "",
+    x_admin_token: str | None = Header(default=None, alias="x-admin-token"),
+) -> AdAdminSlotsResponse:
+    _require_ads_admin_token(header_token=x_admin_token, query_token=token)
+    items = list_admin_ad_slots(days=days)
+    return AdAdminSlotsResponse(
+        updatedAt=date.today().isoformat(),
+        contactWechat=get_ads_contact_wechat(),
+        items=items,
+    )
+
+
+@router.post("/ads/admin/slots", response_model=AdAdminSlotsResponse)
+def ad_slots_admin_upsert(
+    req: AdAdminUpsertRequest,
+    token: str = "",
+    x_admin_token: str | None = Header(default=None, alias="x-admin-token"),
+) -> AdAdminSlotsResponse:
+    _require_ads_admin_token(header_token=x_admin_token, query_token=token)
+    if req.contactWechat is not None:
+        set_ads_contact_wechat(req.contactWechat)
+    if req.slots:
+        upsert_ad_slots([item.model_dump() for item in req.slots])
+    items = list_admin_ad_slots(days=30)
+    return AdAdminSlotsResponse(
+        updatedAt=date.today().isoformat(),
+        contactWechat=get_ads_contact_wechat(),
+        items=items,
+    )
+
+
+@router.post("/ads/admin/toggle", response_model=AdAdminAckResponse)
+def ad_slots_admin_toggle(
+    req: AdAdminToggleRequest,
+    token: str = "",
+    x_admin_token: str | None = Header(default=None, alias="x-admin-token"),
+) -> AdAdminAckResponse:
+    _require_ads_admin_token(header_token=x_admin_token, query_token=token)
+    ok = set_ad_slot_active(slot_id=req.slotId, is_active=req.isActive)
+    if not ok:
+        raise HTTPException(status_code=404, detail="slot not found")
+    return AdAdminAckResponse(ok=True, message="slot status updated")
 
 
 @router.get("/favorites", response_model=FavoriteListResponse)

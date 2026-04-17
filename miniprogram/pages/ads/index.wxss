@@ -45,47 +45,105 @@
   color: #7b5b2a;
 }
 
-.list {
+.state-card {
+  border-radius: 18rpx;
+  padding: 20rpx;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1rpx solid rgba(193, 154, 82, 0.32);
+  color: #4d5f79;
+}
+
+.error {
+  color: #ba4d4d;
+  border-color: rgba(186, 77, 77, 0.34);
+}
+
+.carousel-wrap {
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+}
+
+.ad-swiper {
+  width: 100%;
+  height: 420rpx;
+}
+
+.slide {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.slide-image {
+  width: 100%;
+  height: 100%;
+}
+
+.slide-image-fallback {
+  background: linear-gradient(130deg, #b88743, #5267c9);
+}
+
+.slide-mask {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(14, 24, 39, 0.08), rgba(14, 24, 39, 0.65));
+}
+
+.slide-content {
+  position: absolute;
+  left: 20rpx;
+  right: 20rpx;
+  bottom: 20rpx;
   display: flex;
   flex-direction: column;
-  gap: 12rpx;
+  gap: 8rpx;
 }
 
-.slot-card {
-  padding: 20rpx;
-}
-
-.slot-head {
+.slide-top {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
   gap: 10rpx;
 }
 
 .slot-title {
-  font-size: 30rpx;
+  flex: 1;
+  min-width: 0;
+  font-size: 34rpx;
+  line-height: 1.3;
+  color: #fff;
   font-weight: 700;
-  color: #23334f;
 }
 
 .slot-price {
-  font-size: 24rpx;
-  color: #7a5a2b;
+  flex-shrink: 0;
+  font-size: 22rpx;
+  color: #fff;
   border-radius: 999rpx;
-  border: 1rpx solid rgba(193, 154, 82, 0.35);
-  background: rgba(255, 255, 255, 0.8);
+  border: 1rpx solid rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.18);
   padding: 6rpx 14rpx;
 }
 
-.slot-scene {
-  margin-top: 8rpx;
-  font-size: 24rpx;
-  color: #4f5f79;
+.slot-subtitle,
+.slot-scene,
+.slot-audience {
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, 0.92);
+  line-height: 1.45;
 }
 
-.slot-audience {
-  margin-top: 6rpx;
+.swiper-index {
+  position: absolute;
+  right: 14rpx;
+  bottom: 14rpx;
   font-size: 22rpx;
-  color: #6c7890;
-  line-height: 1.5;
+  color: #fff;
+  border-radius: 999rpx;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 5rpx 14rpx;
 }

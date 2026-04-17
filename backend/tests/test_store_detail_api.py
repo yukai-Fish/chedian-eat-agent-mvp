@@ -14,7 +14,11 @@ def test_store_detail_with_valid_name_returns_structure() -> None:
     if data["found"]:
         assert data["store"]["name"]
         assert "avgPrice" in data["store"]
+        assert "avgPriceMin" in data["store"]
+        assert "avgPriceMax" in data["store"]
         assert "openHours" in data["store"]
+        assert "businessStatus" in data["store"]
+        assert "imageUrls" in data["store"]
         assert "reviews" in data["store"]
 
 

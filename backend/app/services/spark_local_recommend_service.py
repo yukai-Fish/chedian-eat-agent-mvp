@@ -79,6 +79,104 @@ def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     return 2 * radius_km * math.asin(min(1.0, math.sqrt(a)))
 
 
+def _to_int(value: Any) -> Optional[int]:
+    num = _to_float(value)
+    if num is None:
+        return None
+    return int(round(num))
+
+
+def _tencent_map_api_key() -> str:
+    return os.getenv("TENCENT_MAP_API_KEY", "").strip()
+
+
+def _fetch_walking_metrics(
+    origin_lat: float,
+    origin_lng: float,
+    dest_lat: float,
+    dest_lng: float,
+) -> Optional[Tuple[int, int]]:
+    key = _tencent_map_api_key()
+    if not key:
+        return None
+
+    endpoint = os.getenv("TENCENT_WALKING_ENDPOINT", "https://apis.map.qq.com/ws/direction/v1/walking").strip()
+    if not endpoint:
+        return None
+    timeout = _to_float(os.getenv("TENCENT_WALKING_TIMEOUT_SECONDS")) or 1.8
+    params = {
+        "from": f"{origin_lat:.6f},{origin_lng:.6f}",
+        "to": f"{dest_lat:.6f},{dest_lng:.6f}",
+        "key": key,
+    }
+
+    try:
+        with httpx.Client(timeout=timeout, trust_env=False, http2=False) as client:
+            resp = client.get(endpoint, params=params)
+    except httpx.RequestError:
+        return None
+
+    if resp.status_code != 200:
+        return None
+
+    try:
+        data = resp.json()
+    except ValueError:
+        return None
+
+    if int(data.get("status") or -1) != 0:
+        return None
+
+    result = data.get("result") if isinstance(data, dict) else None
+    routes = result.get("routes") if isinstance(result, dict) else None
+    if not isinstance(routes, list) or not routes:
+        return None
+
+    first = routes[0] if isinstance(routes[0], dict) else {}
+    distance_m = _to_int(first.get("distance"))
+    duration_s = _to_int(first.get("duration"))
+    if distance_m is None or duration_s is None or distance_m < 0 or duration_s < 0:
+        return None
+    return distance_m, duration_s
+
+
+def _apply_walking_metrics(
+    scored: List[Dict[str, Any]],
+    *,
+    user_lat: float,
+    user_lng: float,
+) -> None:
+    if not scored or not _tencent_map_api_key():
+        return
+
+    limit = _to_int(os.getenv("TENCENT_WALKING_CANDIDATE_LIMIT")) or 8
+    limit = max(1, min(limit, 20))
+
+    prelim = sorted(
+        scored,
+        key=lambda x: (
+            -float(x["score"]),
+            float(x["distance_sort"]),
+            int(x["avg_price"]),
+            str(x["id"]),
+        ),
+    )
+    for candidate in prelim[:limit]:
+        anchor = _shop_anchor_point(candidate["row"])
+        if not anchor:
+            continue
+        metrics = _fetch_walking_metrics(user_lat, user_lng, anchor[0], anchor[1])
+        if not metrics:
+            continue
+
+        distance_m, duration_s = metrics
+        walking_minutes = round(duration_s / 60.0, 1)
+        candidate["walking_distance_m"] = distance_m
+        candidate["walking_minutes"] = walking_minutes
+        # Nearby mode should prefer options that are truly reachable on foot now.
+        candidate["score"] = float(candidate["score"]) + max(0.0, 1.9 - min(walking_minutes, 45.0) * 0.05)
+
+
 def _normalize_area(text: Any) -> str:
     value = str(text or "").strip()
     if not value:
@@ -153,7 +251,7 @@ def _candidate_shops(
     scene = (slots.scene or "").strip()
     time_hint = (slots.time or "").strip()
 
-    scored: List[Tuple[float, float, Dict[str, Any], Optional[float]]] = []
+    scored: List[Dict[str, Any]] = []
     for item in shops:
         if _is_excluded(str(item.get("name", "")), excluded):
             continue
@@ -197,30 +295,54 @@ def _candidate_shops(
                 score += max(0.0, 1.6 - min(distance_km, 8.0) * 0.28)
 
         distance_sort = float(distance_km) if distance_km is not None else 999.0
-        scored.append((score, distance_sort, item, distance_km))
+        scored.append(
+            {
+                "score": score,
+                "distance_sort": distance_sort,
+                "row": item,
+                "distance_km": distance_km,
+                "walking_minutes": None,
+                "walking_distance_m": None,
+                "avg_price": int(item.get("avg_price", 0) or 0),
+                "id": str(item.get("id", "")),
+            }
+        )
+
+    if nearby_preferred and user_lat is not None and user_lng is not None:
+        _apply_walking_metrics(scored, user_lat=user_lat, user_lng=user_lng)
 
     if nearby_preferred:
-        scored.sort(key=lambda x: (-x[0], x[1], int(x[2].get("avg_price", 0) or 0), str(x[2].get("id", ""))))
+        scored.sort(
+            key=lambda x: (
+                -float(x["score"]),
+                float(x["walking_minutes"]) if x["walking_minutes"] is not None else 9999.0,
+                float(x["distance_sort"]),
+                int(x["avg_price"]),
+                str(x["id"]),
+            )
+        )
     else:
-        scored.sort(key=lambda x: (-x[0], int(x[2].get("avg_price", 0) or 0), str(x[2].get("id", ""))))
-    selected = [(row, distance_km) for _, _, row, distance_km in scored[:limit]]
+        scored.sort(key=lambda x: (-float(x["score"]), int(x["avg_price"]), str(x["id"])))
+    selected = scored[:limit]
 
     return [
         {
-            "id": str(row.get("id", "")),
-            "name": str(row.get("name", "")),
-            "campus": str(row.get("campus", "")),
-            "area": str(row.get("area", "")),
-            "latitude": _to_float(row.get("latitude")),
-            "longitude": _to_float(row.get("longitude")),
-            "avg_price": int(row.get("avg_price", 0) or 0),
-            "open_hours": str(row.get("open_hours", "")),
-            "tastes": str(row.get("tastes", "")),
-            "scenes": str(row.get("scenes", "")),
-            "tags": str(row.get("tags", "")),
-            "distance_km": round(float(distance_km), 2) if distance_km is not None else None,
+            "id": str(item["row"].get("id", "")),
+            "name": str(item["row"].get("name", "")),
+            "campus": str(item["row"].get("campus", "")),
+            "area": str(item["row"].get("area", "")),
+            "latitude": _to_float(item["row"].get("latitude")),
+            "longitude": _to_float(item["row"].get("longitude")),
+            "avg_price": int(item["row"].get("avg_price", 0) or 0),
+            "open_hours": str(item["row"].get("open_hours", "")),
+            "tastes": str(item["row"].get("tastes", "")),
+            "scenes": str(item["row"].get("scenes", "")),
+            "tags": str(item["row"].get("tags", "")),
+            "distance_km": round(float(item["distance_km"]), 2) if item["distance_km"] is not None else None,
+            "walking_minutes": item["walking_minutes"],
+            "walking_distance_m": item["walking_distance_m"],
         }
-        for row, distance_km in selected
+        for item in selected
     ]
 
 

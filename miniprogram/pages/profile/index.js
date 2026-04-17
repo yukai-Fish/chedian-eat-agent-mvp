@@ -62,7 +62,7 @@ Page({
         const remoteHistory = Array.isArray(remote && remote.queryHistory) ? remote.queryHistory : [];
         local = this.persistLocalData(remoteFavorites, remoteHistory, identity);
       } catch (_err) {
-        // use local fallback when profile API is unavailable
+        // Use local fallback when profile API is unavailable.
       }
     }
 
@@ -127,7 +127,7 @@ Page({
           source: "miniprogram_profile",
         });
       } catch (_syncErr) {
-        // login can still proceed even when migration API is temporarily unavailable
+        // Login can still proceed even when migration API is temporarily unavailable.
       }
 
       this.identity = saveAuthenticatedIdentity(

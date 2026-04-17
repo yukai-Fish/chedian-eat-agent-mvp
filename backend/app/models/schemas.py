@@ -116,6 +116,73 @@ class EventAckResponse(BaseModel):
     ok: bool = True
 
 
+class AdSlotPublicItem(BaseModel):
+    id: str
+    title: str
+    subtitle: str = ""
+    scene: str = ""
+    audience: str = ""
+    priceLabel: str = ""
+    imageUrl: str = ""
+    landingType: Literal["none", "store_detail", "miniprogram_path", "external_web", "copy_wechat"] = "none"
+    landingValue: str = ""
+    rank: int = 0
+
+
+class AdSlotsResponse(BaseModel):
+    updatedAt: str
+    contactWechat: str
+    items: List[AdSlotPublicItem] = Field(default_factory=list)
+
+
+class AdClickEventRequest(BaseModel):
+    slotId: str = Field(..., min_length=1, max_length=80)
+    uid: Optional[str] = None
+    anonymousId: Optional[str] = None
+    userId: Optional[str] = None
+    source: Optional[str] = Field(default="miniprogram_ads", max_length=60)
+
+
+class AdAdminSlotItem(BaseModel):
+    id: str = Field(..., min_length=1, max_length=80)
+    title: str = Field(..., min_length=1, max_length=80)
+    subtitle: Optional[str] = Field(default="", max_length=180)
+    scene: Optional[str] = Field(default="", max_length=80)
+    audience: Optional[str] = Field(default="", max_length=180)
+    priceLabel: Optional[str] = Field(default="", max_length=40)
+    imageUrl: Optional[str] = Field(default="", max_length=1000)
+    landingType: Literal["none", "store_detail", "miniprogram_path", "external_web", "copy_wechat"] = "none"
+    landingValue: Optional[str] = Field(default="", max_length=500)
+    rank: int = 0
+    isActive: bool = True
+    startsAt: Optional[str] = Field(default="")
+    endsAt: Optional[str] = Field(default="")
+    updatedAt: Optional[str] = None
+    totalClicks: int = 0
+    recentClicks: int = 0
+
+
+class AdAdminSlotsResponse(BaseModel):
+    updatedAt: str
+    contactWechat: str
+    items: List[AdAdminSlotItem] = Field(default_factory=list)
+
+
+class AdAdminUpsertRequest(BaseModel):
+    contactWechat: Optional[str] = Field(default=None, max_length=80)
+    slots: List[AdAdminSlotItem] = Field(default_factory=list, max_length=100)
+
+
+class AdAdminToggleRequest(BaseModel):
+    slotId: str = Field(..., min_length=1, max_length=80)
+    isActive: bool
+
+
+class AdAdminAckResponse(BaseModel):
+    ok: bool = True
+    message: Optional[str] = None
+
+
 class FavoriteWriteRequest(BaseModel):
     userId: str = Field(..., min_length=1, max_length=120)
     shopId: str = Field(..., min_length=1, max_length=120)
@@ -200,6 +267,13 @@ class StoreReviewItem(BaseModel):
     source: Optional[str] = None
 
 
+class StoreBusinessStatus(BaseModel):
+    code: Literal["open", "closing", "closed", "unknown"] = "unknown"
+    label: str
+    detail: str
+    evaluatedAt: str
+
+
 class StoreDetailData(BaseModel):
     id: str
     name: str
@@ -209,8 +283,13 @@ class StoreDetailData(BaseModel):
     address: Optional[str] = None
     category: Optional[str] = None
     geoSource: Optional[str] = None
+    phone: Optional[str] = None
     avgPrice: int
+    avgPriceMin: int
+    avgPriceMax: int
     openHours: Optional[str] = None
+    businessStatus: Optional[StoreBusinessStatus] = None
+    imageUrls: List[str] = Field(default_factory=list)
     categoryTags: List[str] = Field(default_factory=list)
     tasteTags: List[str] = Field(default_factory=list)
     sceneTags: List[str] = Field(default_factory=list)

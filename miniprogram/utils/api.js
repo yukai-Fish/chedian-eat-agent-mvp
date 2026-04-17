@@ -76,6 +76,37 @@ function logRankingClick(payload) {
   });
 }
 
+function fetchAdSlots(limit = 10) {
+  const topN = Number(limit) || 10;
+  return request({
+    url: `/api/v1/ads/slots?limit=${encodeURIComponent(topN)}`,
+    method: "GET",
+  }).catch((err) => {
+    const msg = err && err.message ? String(err.message) : "";
+    if (!msg.includes("HTTP 404")) throw err;
+    return request({
+      url: `/api/ads/slots?limit=${encodeURIComponent(topN)}`,
+      method: "GET",
+    });
+  });
+}
+
+function logAdClick(payload) {
+  return request({
+    url: "/api/v1/events/ad-click",
+    method: "POST",
+    data: payload,
+  }).catch((err) => {
+    const msg = err && err.message ? String(err.message) : "";
+    if (!msg.includes("HTTP 404")) throw err;
+    return request({
+      url: "/api/events/ad-click",
+      method: "POST",
+      data: payload,
+    });
+  });
+}
+
 function wechatLogin(payload) {
   return request({
     url: "/api/auth/wechat-login",
@@ -122,6 +153,8 @@ module.exports = {
   fetchStoreDetail,
   fetchTodayRankings,
   logRankingClick,
+  fetchAdSlots,
+  logAdClick,
   wechatLogin,
   fetchProfileData,
   syncProfileLocal,

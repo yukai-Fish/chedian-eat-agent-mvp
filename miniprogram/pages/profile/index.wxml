@@ -3,7 +3,7 @@
     <view class="hero-deco"></view>
     <view class="hero-head">
       <view>
-        <text class="title">鎴戠殑</text>
+        <text class="title">我的</text>
       </view>
       <button
         class="{{isAuthenticated ? 'ghost-btn' : 'gold-btn'}} login-btn"
@@ -11,59 +11,58 @@
         disabled="{{isAuthenticated}}"
         bindtap="onWechatLogin"
       >
-        {{isAuthenticated ? '已登录' : '微信登录'}}
+        {{isAuthenticated ? '微信已登录' : '微信登录'}}
       </button>
     </view>
     <view class="identity-panel">
       <text class="identity-label">{{identityLabel}}</text>
-      <text class="identity-sub">鍖垮悕鏍囪瘑 路 {{anonymousIdShort || "鏈敓鎴?}}</text>
+      <text class="identity-sub">匿名标识：{{anonymousIdShort || "未生成"}}</text>
     </view>
   </view>
 
   <view class="stats">
     <view class="stat-item glass-card">
       <text class="stat-value">{{favoritesCount}}</text>
-      <text class="stat-label">鎴戠殑鏀惰棌</text>
-      <text class="stat-tip">甯稿幓搴楅摵蹇€熷洖鐪?/text>
+      <text class="stat-label">我的收藏</text>
+      <text class="stat-tip">常用店铺会持续沉淀到个人偏好</text>
     </view>
     <view class="stat-item glass-card">
       <text class="stat-value">{{queryHistoryCount}}</text>
-      <text class="stat-label">鏈€杩戞煡璇?/text>
-      <text class="stat-tip">澶嶇敤楂橀闇€姹?/text>
+      <text class="stat-label">最近查询</text>
+      <text class="stat-tip">保留近期需求，方便一键复用</text>
     </view>
     <view class="stat-item glass-card">
-      <text class="stat-value">{{locationEnabled ? "宸插紑" : "鏈紑"}}</text>
-      <text class="stat-label">瀹氫綅鏉冮檺</text>
-      <text class="stat-tip">{{locationEnabled ? "闄勮繎浼樺厛鍙敤" : "寤鸿寮€鍚紭鍖栨帹鑽?}}</text>
+      <text class="stat-value">{{locationEnabled ? "已开" : "未开"}}</text>
+      <text class="stat-label">定位权限</text>
+      <text class="stat-tip">{{locationEnabled ? "附近优先可按实时位置推荐" : "建议开启定位，获取更近店铺"}}</text>
     </view>
   </view>
 
   <view class="actions glass-card">
-    <text class="section-title">甯哥敤鍏ュ彛</text>
+    <text class="section-title">常用操作</text>
 
     <view class="action-item" bindtap="onOpenLocationSetting">
       <view class="action-main-wrap">
-        <text class="action-main">瀹氫綅鏉冮檺璁剧疆</text>
-        <text class="action-sub">{{locationEnabled ? "褰撳墠宸插紑鍚紝鍙户缁繚鎸? : "褰撳墠鏈紑鍚紝寤鸿鎵撳紑鎻愬崌闄勮繎鎺ㄨ崘鍑嗙‘搴?}}</text>
+        <text class="action-main">定位权限设置</text>
+        <text class="action-sub">{{locationEnabled ? "已授权定位，可继续优化附近推荐准确度" : "去系统设置开启定位权限，提升附近优先效果"}}</text>
       </view>
-      <text class="action-arrow">鈥?/text>
+      <text class="action-arrow">></text>
     </view>
 
     <view class="action-item" bindtap="onGoAds">
       <view class="action-main-wrap">
-        <text class="action-main">鏌ョ湅鍟嗗鎺ㄨ崘椤?/text>
-        <text class="action-sub">鏌ョ湅鍟嗗鎶曟斁浣嶄笌鍚堜綔淇℃伅</text>
+        <text class="action-main">查看商家推荐页</text>
+        <text class="action-sub">浏览商家精选内容与活动展示位</text>
       </view>
-      <text class="action-arrow">鈥?/text>
+      <text class="action-arrow">></text>
     </view>
 
     <view class="action-item action-primary" bindtap="onGoInquiry">
       <view class="action-main-wrap">
-        <text class="action-main action-main-primary">杩斿洖闂椤?/text>
-        <text class="action-sub action-sub-primary">缁х画鑾峰彇缇庨鎺ㄨ崘</text>
+        <text class="action-main action-main-primary">返回问询页</text>
+        <text class="action-sub action-sub-primary">继续输入需求，获取新的推荐结果</text>
       </view>
-      <text class="action-arrow action-arrow-primary">鈥?/text>
+      <text class="action-arrow action-arrow-primary">></text>
     </view>
   </view>
 </view>
-

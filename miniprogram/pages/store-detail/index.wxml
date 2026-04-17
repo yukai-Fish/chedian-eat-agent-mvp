@@ -1,70 +1,109 @@
 <view class="page">
-  <view wx:if="{{loading}}" class="state-card">Loading store detail...</view>
+  <view wx:if="{{loading}}" class="state-card">正在加载商家详情...</view>
 
   <view wx:if="{{!loading && error}}" class="state-card error">{{error}}</view>
 
-  <view wx:if="{{!loading && found && store}}" class="detail-card">
-    <view class="name">{{store.name}}</view>
-    <view class="meta">{{store.campus}} {{store.area ? (' - ' + store.area) : ''}}</view>
-    <view wx:if="{{store.address}}" class="meta">地址：{{store.address}}</view>
-    <view wx:if="{{store.category}}" class="meta">分类：{{store.category}}</view>
-    <view wx:if="{{openStatus}}" class="status-line">
-      <text class="status-badge status-{{openStatus.status}}">{{openStatus.label}}</text>
-      <text class="status-detail">{{openStatus.detail}}</text>
+  <view wx:if="{{!loading && found && store}}" class="detail-wrap">
+    <view class="gallery-card">
+      <swiper
+        wx:if="{{imageUrls.length > 0}}"
+        class="gallery-swiper"
+        circular="{{imageUrls.length > 1}}"
+        indicator-dots="{{imageUrls.length > 1}}"
+        indicator-color="rgba(255,255,255,0.5)"
+        indicator-active-color="#ffffff"
+        autoplay="{{imageUrls.length > 1}}"
+        interval="3800"
+        duration="280"
+        bindchange="onSwiperChange"
+      >
+        <swiper-item wx:for="{{imageUrls}}" wx:key="*this">
+          <image class="gallery-image" src="{{item}}" mode="aspectFill" data-index="{{index}}" bindtap="onPreviewImage" />
+        </swiper-item>
+      </swiper>
+      <view wx:else class="gallery-empty">暂无商家图片</view>
+      <view wx:if="{{imageUrls.length > 1}}" class="gallery-count">{{currentImageIndex + 1}} / {{imageUrls.length}}</view>
     </view>
 
-    <view class="section">
-      <view class="label">Avg Price</view>
-      <view class="value">¥{{store.avgPrice}}</view>
-    </view>
+    <view class="info-card">
+      <view class="title-row">
+        <view class="name">{{store.name}}</view>
+        <view class="price-pill">人均 ¥{{store.avgPrice}}</view>
+      </view>
+      <view class="meta">{{store.campus}}{{store.area ? (" · " + store.area) : ""}}</view>
 
-    <view class="section">
-      <view class="label">Open Hours</view>
-      <view class="value">{{store.openHours || "N/A"}}</view>
-    </view>
+      <view wx:if="{{openStatus}}" class="status-row">
+        <text class="status-badge status-{{openStatus.status}}">{{openStatus.label}}</text>
+        <text class="status-detail">{{openStatus.detail}}</text>
+      </view>
 
-    <view class="section">
-      <view class="label">Category Tags</view>
-      <view class="tags">
-        <text wx:for="{{store.categoryTags}}" wx:key="*this" class="tag">{{item}}</text>
-        <text wx:if="{{!store.categoryTags || store.categoryTags.length===0}}" class="value">N/A</text>
+      <view class="line-item">
+        <text class="line-label">人均区间</text>
+        <text class="line-value">¥{{store.avgPriceMin}} - ¥{{store.avgPriceMax}}</text>
+      </view>
+
+      <view class="line-item">
+        <text class="line-label">营业时间</text>
+        <text class="line-value">{{store.openHours || "待补充"}}</text>
+      </view>
+
+      <view wx:if="{{store.address}}" class="line-item">
+        <text class="line-label">地址</text>
+        <text class="line-value address">{{store.address}}</text>
+      </view>
+
+      <view wx:if="{{store.phone}}" class="line-item">
+        <text class="line-label">电话</text>
+        <view class="line-phone-wrap">
+          <text class="line-value">{{store.phone}}</text>
+          <button class="call-btn" bindtap="onCallStore">拨打</button>
+        </view>
       </view>
     </view>
 
-    <view class="section">
-      <view class="label">Taste Tags</view>
-      <view class="tags">
-        <text wx:for="{{store.tasteTags}}" wx:key="*this" class="tag">{{item}}</text>
-        <text wx:if="{{!store.tasteTags || store.tasteTags.length===0}}" class="value">N/A</text>
+    <view class="tag-card">
+      <view class="tag-group" wx:if="{{store.categoryTags && store.categoryTags.length}}">
+        <view class="tag-title">品类标签</view>
+        <view class="tags">
+          <text wx:for="{{store.categoryTags}}" wx:key="*this" class="tag">{{item}}</text>
+        </view>
+      </view>
+
+      <view class="tag-group" wx:if="{{store.tasteTags && store.tasteTags.length}}">
+        <view class="tag-title">口味标签</view>
+        <view class="tags">
+          <text wx:for="{{store.tasteTags}}" wx:key="*this" class="tag">{{item}}</text>
+        </view>
+      </view>
+
+      <view class="tag-group" wx:if="{{store.sceneTags && store.sceneTags.length}}">
+        <view class="tag-title">场景标签</view>
+        <view class="tags">
+          <text wx:for="{{store.sceneTags}}" wx:key="*this" class="tag">{{item}}</text>
+        </view>
       </view>
     </view>
 
-    <view class="section">
-      <view class="label">Scene Tags</view>
-      <view class="tags">
-        <text wx:for="{{store.sceneTags}}" wx:key="*this" class="tag">{{item}}</text>
-        <text wx:if="{{!store.sceneTags || store.sceneTags.length===0}}" class="value">N/A</text>
+    <view class="review-card">
+      <view class="review-head">
+        <view class="review-title">用户评价</view>
+        <view class="review-meta">
+          <text>{{store.reviewCount || 0}} 条</text>
+          <text wx:if="{{store.avgRating}}"> · 评分 {{store.avgRating}}</text>
+        </view>
       </view>
-    </view>
 
-    <view class="review-head">
-      <view class="review-title">Review Summary</view>
-      <view class="review-meta">
-        <text>Total {{store.reviewCount || 0}}</text>
-        <text wx:if="{{store.avgRating}}"> · Avg {{store.avgRating}}</text>
+      <view wx:if="{{!store.reviews || store.reviews.length===0}}" class="empty-review">暂时还没有评价，欢迎成为首位打分用户。</view>
+
+      <view wx:for="{{store.reviews}}" wx:key="id" class="review-item">
+        <view class="review-top">
+          <text class="review-rating" wx:if="{{item.rating}}">评分 {{item.rating}} / 5</text>
+          <text class="review-time">{{item.createdAt}}</text>
+        </view>
+        <view wx:if="{{item.comment}}" class="review-content">{{item.comment}}</view>
+        <view wx:if="{{item.recommendDish}}" class="review-extra">推荐菜：{{item.recommendDish}}</view>
+        <view wx:if="{{item.recommendReason}}" class="review-extra">推荐理由：{{item.recommendReason}}</view>
       </view>
-    </view>
-
-    <view wx:if="{{!store.reviews || store.reviews.length===0}}" class="empty-review">No reviews yet.</view>
-
-    <view wx:for="{{store.reviews}}" wx:key="id" class="review-item">
-      <view class="review-top">
-        <text class="review-rating" wx:if="{{item.rating}}">Rating {{item.rating}}/5</text>
-        <text class="review-time">{{item.createdAt}}</text>
-      </view>
-      <view class="review-content" wx:if="{{item.comment}}">{{item.comment}}</view>
-      <view class="review-extra" wx:if="{{item.recommendDish}}">Dish: {{item.recommendDish}}</view>
-      <view class="review-extra" wx:if="{{item.recommendReason}}">Reason: {{item.recommendReason}}</view>
     </view>
   </view>
 </view>

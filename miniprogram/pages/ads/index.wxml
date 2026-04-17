@@ -1,7 +1,7 @@
 <view class="page">
   <view class="hero glass-card">
     <text class="title">商家推荐广告位</text>
-    <text class="subtitle">面向成电同学校园场景，精准曝光到“正在找吃的”用户。</text>
+    <text class="subtitle">支持上/下架、轮播展示和点击统计，面向成电校园场景做精准触达。</text>
     <view class="hero-actions">
       <button class="ghost-btn action-btn" bindtap="onCopyContact">复制商务微信</button>
       <button class="gold-btn action-btn" bindtap="onGoInquiry">返回问询页</button>
@@ -9,16 +9,40 @@
     <text class="contact">商务微信：{{contactWechat}}</text>
   </view>
 
-  <view class="list">
-    <block wx:for="{{adSlots}}" wx:key="id">
-      <view class="slot-card glass-card">
-        <view class="slot-head">
-          <text class="slot-title">{{item.title}}</text>
-          <text class="slot-price">{{item.price}}</text>
+  <view wx:if="{{loading}}" class="state-card">正在加载广告位...</view>
+  <view wx:if="{{!loading && error}}" class="state-card error">{{error}}</view>
+
+  <view wx:if="{{!loading && !error && adSlots.length > 0}}" class="carousel-wrap glass-card">
+    <swiper
+      class="ad-swiper"
+      circular="{{adSlots.length > 1}}"
+      indicator-dots="{{adSlots.length > 1}}"
+      indicator-color="rgba(255,255,255,0.5)"
+      indicator-active-color="#ffffff"
+      autoplay="{{adSlots.length > 1}}"
+      interval="3600"
+      duration="320"
+      bindchange="onSwiperChange"
+    >
+      <swiper-item wx:for="{{adSlots}}" wx:key="id">
+        <view class="slide" data-index="{{index}}" bindtap="onTapSlide">
+          <image wx:if="{{item.imageUrl}}" class="slide-image" src="{{item.imageUrl}}" mode="aspectFill" />
+          <view wx:else class="slide-image slide-image-fallback"></view>
+          <view class="slide-mask"></view>
+          <view class="slide-content">
+            <view class="slide-top">
+              <text class="slot-title">{{item.title}}</text>
+              <text wx:if="{{item.priceLabel}}" class="slot-price">{{item.priceLabel}}</text>
+            </view>
+            <text wx:if="{{item.subtitle}}" class="slot-subtitle">{{item.subtitle}}</text>
+            <text wx:if="{{item.scene}}" class="slot-scene">{{item.scene}}</text>
+            <text wx:if="{{item.audience}}" class="slot-audience">{{item.audience}}</text>
+          </view>
         </view>
-        <text class="slot-scene">{{item.scene}}</text>
-        <text class="slot-audience">{{item.audience}}</text>
-      </view>
-    </block>
+      </swiper-item>
+    </swiper>
+    <view class="swiper-index">{{currentIndex + 1}} / {{adSlots.length}}</view>
   </view>
+
+  <view wx:if="{{!loading && !error && adSlots.length === 0}}" class="state-card">暂无上架广告位，欢迎联系商务微信投放。</view>
 </view>

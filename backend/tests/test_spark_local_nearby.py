@@ -153,3 +153,126 @@ def test_candidate_shops_prefers_real_coordinates_when_present(monkeypatch) -> N
     assert len(ranked) == 2
     assert ranked[0]["name"] == "latlng-near-shop"
     assert ranked[0]["distance_km"] is not None
+
+
+def test_candidate_shops_prefer_walking_time_when_available(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.services.spark_local_recommend_service.parse_query",
+        lambda _q: ParsedSlots(budget_max=None, location=None, scene=None, taste=None, time=None),
+    )
+    monkeypatch.setattr(
+        "app.services.spark_local_recommend_service.fetch_active_shops",
+        lambda: [
+            {
+                "id": "near",
+                "name": "near-shop",
+                "campus": "campus-a",
+                "area": "west",
+                "latitude": 30.7522,
+                "longitude": 103.9349,
+                "avg_price": 22,
+                "open_hours": "10:00-22:00",
+                "tastes": "light",
+                "scenes": "solo",
+                "tags": "noodle",
+            },
+            {
+                "id": "fast-walk",
+                "name": "fast-walk-shop",
+                "campus": "campus-a",
+                "area": "west",
+                "latitude": 30.7528,
+                "longitude": 103.9400,
+                "avg_price": 22,
+                "open_hours": "10:00-22:00",
+                "tastes": "light",
+                "scenes": "solo",
+                "tags": "noodle",
+            },
+        ],
+    )
+    monkeypatch.setattr(
+        "app.services.spark_local_recommend_service._tencent_map_api_key",
+        lambda: "test-key",
+    )
+    monkeypatch.setattr(
+        "app.services.spark_local_recommend_service._fetch_walking_metrics",
+        lambda _olat, _olng, dlat, _dlng: (900, 1200) if abs(dlat - 30.7522) < 1e-6 else (600, 480),
+    )
+
+    ranked = _candidate_shops(
+        "anything",
+        limit=2,
+        nearby_context={
+            "preferNearby": True,
+            "latitude": 30.7522,
+            "longitude": 103.9349,
+            "campus": "campus-a",
+            "areaHint": "west",
+        },
+    )
+    assert len(ranked) == 2
+    assert ranked[0]["name"] == "fast-walk-shop"
+    assert ranked[0]["walking_minutes"] is not None
+    assert ranked[0]["walking_distance_m"] is not None
+
+
+def test_candidate_shops_fallback_when_walking_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.services.spark_local_recommend_service.parse_query",
+        lambda _q: ParsedSlots(budget_max=None, location=None, scene=None, taste=None, time=None),
+    )
+    monkeypatch.setattr(
+        "app.services.spark_local_recommend_service.fetch_active_shops",
+        lambda: [
+            {
+                "id": "near",
+                "name": "near-shop",
+                "campus": "campus-a",
+                "area": "west",
+                "latitude": 30.7522,
+                "longitude": 103.9349,
+                "avg_price": 22,
+                "open_hours": "10:00-22:00",
+                "tastes": "light",
+                "scenes": "solo",
+                "tags": "noodle",
+            },
+            {
+                "id": "far",
+                "name": "far-shop",
+                "campus": "campus-a",
+                "area": "west",
+                "latitude": 30.6742,
+                "longitude": 104.1003,
+                "avg_price": 22,
+                "open_hours": "10:00-22:00",
+                "tastes": "light",
+                "scenes": "solo",
+                "tags": "noodle",
+            },
+        ],
+    )
+    monkeypatch.setattr(
+        "app.services.spark_local_recommend_service._tencent_map_api_key",
+        lambda: "test-key",
+    )
+    monkeypatch.setattr(
+        "app.services.spark_local_recommend_service._fetch_walking_metrics",
+        lambda *_args, **_kwargs: None,
+    )
+
+    ranked = _candidate_shops(
+        "anything",
+        limit=2,
+        nearby_context={
+            "preferNearby": True,
+            "latitude": 30.7522,
+            "longitude": 103.9349,
+            "campus": "campus-a",
+            "areaHint": "west",
+        },
+    )
+    assert len(ranked) == 2
+    assert ranked[0]["name"] == "near-shop"
+    assert ranked[0]["walking_minutes"] is None

@@ -1,9 +1,13 @@
 import json
 import os
+from datetime import date
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from app.models.schemas import (
+    AdClickEventRequest,
+    AdSlotsResponse,
+    EventAckResponse,
     FeedbackRequest,
     FeedbackResponse,
     ProfileDataResponse,
@@ -17,6 +21,7 @@ from app.models.schemas import (
     WorkflowResumeRequest,
     WorkflowUploadFileResponse,
 )
+from app.services.ad_repository import get_ads_contact_wechat, list_public_ad_slots, log_ad_click_event
 from app.services.favorites_repository import add_favorite, list_favorites
 from app.services.feedback_repository import save_feedback, suggest_store_names
 from app.services.shop_repository import fetch_store_detail_by_name, resolve_shop_identity_by_name
@@ -132,6 +137,28 @@ def wechat_login_proxy(req: WechatLoginRequest) -> WechatLoginResponse:
         anonymous_id=req.anonymousId,
     )
     return WechatLoginResponse(**result)
+
+
+@proxy_router.get("/ads/slots", response_model=AdSlotsResponse)
+def ad_slots_proxy(limit: int = 10) -> AdSlotsResponse:
+    slots = list_public_ad_slots(limit=limit)
+    return AdSlotsResponse(
+        updatedAt=date.today().isoformat(),
+        contactWechat=get_ads_contact_wechat(),
+        items=slots,
+    )
+
+
+@proxy_router.post("/events/ad-click", response_model=EventAckResponse)
+def ad_click_proxy(req: AdClickEventRequest) -> EventAckResponse:
+    log_ad_click_event(
+        slot_id=req.slotId,
+        uid=req.uid,
+        anonymous_id=req.anonymousId,
+        user_id=req.userId,
+        source=(req.source or "miniprogram_ads").strip() or "miniprogram_ads",
+    )
+    return EventAckResponse(ok=True)
 
 
 @proxy_router.get("/profile/data", response_model=ProfileDataResponse)

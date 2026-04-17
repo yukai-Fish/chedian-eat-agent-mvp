@@ -6,6 +6,8 @@
   poi_id TEXT,
   address TEXT,
   category TEXT,
+  phone TEXT,
+  image_urls TEXT,
   geo_source TEXT,
   geo_score REAL,
   latitude REAL,
@@ -89,3 +91,43 @@ CREATE TABLE IF NOT EXISTS user_favorites (
 
 CREATE INDEX IF NOT EXISTS idx_favorites_user_time
   ON user_favorites(user_id, created_at);
+
+CREATE TABLE IF NOT EXISTS ad_slots (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  subtitle TEXT,
+  scene TEXT,
+  audience TEXT,
+  price_label TEXT,
+  image_url TEXT,
+  landing_type TEXT DEFAULT 'none',
+  landing_value TEXT,
+  rank INTEGER DEFAULT 0,
+  is_active INTEGER DEFAULT 1,
+  starts_at TEXT,
+  ends_at TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_ad_slots_active_rank
+  ON ad_slots(is_active, rank, updated_at);
+
+CREATE TABLE IF NOT EXISTS ad_click_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  slot_id TEXT NOT NULL,
+  uid TEXT,
+  anonymous_id TEXT,
+  user_id TEXT,
+  source TEXT DEFAULT 'miniprogram_ads',
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_ad_click_slot_time
+  ON ad_click_events(slot_id, created_at);
+
+CREATE TABLE IF NOT EXISTS ad_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
