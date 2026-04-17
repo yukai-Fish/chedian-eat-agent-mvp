@@ -31,6 +31,7 @@ from app.services.ad_repository import get_ads_contact_wechat, list_public_ad_sl
 from app.services.favorites_repository import add_favorite, list_favorites
 from app.services.feedback_repository import save_feedback, suggest_store_names
 from app.services.profile_settings_repository import get_profile_settings, upsert_profile_settings
+from app.services.query_intent_service import build_query_with_intent_hint, extract_query_intents
 from app.services.shop_repository import fetch_store_detail_by_name, resolve_shop_identity_by_name
 from app.services.spark_local_recommend_service import ask_spark_local_recommend
 from app.services.user_profile import build_iterative_profile
@@ -89,6 +90,8 @@ def _clean_optional_text(value: str | None, *, max_length: int) -> str | None:
 
 @proxy_router.post("/recommend", response_model=WorkflowRecommendResponse)
 def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendResponse:
+    query_intents = extract_query_intents(req.query)
+    effective_query = build_query_with_intent_hint(req.query, query_intents)
     resolved_uid = req.uid or req.userId or req.anonymousId
     provider = os.getenv("RECOMMEND_PROVIDER", "workflow").strip().lower()
     excluded_names = [str(name).strip() for name in (req.excludeStoreNames or []) if str(name).strip()][:20]
@@ -141,6 +144,8 @@ def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendRe
             "profile_stats": profile.get("stats", {}),
             "preference_profile_applied": isinstance(preference_profile, dict),
             "preference_fields": sorted(list((preference_profile or {}).keys())) if isinstance(preference_profile, dict) else [],
+            "query_intents": query_intents,
+            "effective_query_changed": effective_query != req.query,
         },
     )
 
@@ -151,6 +156,10 @@ def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendRe
             merged_parameters["AGENT_USER_PROFILE_JSON"] = json.dumps(profile.get("signals", {}), ensure_ascii=False)
         if isinstance(preference_profile, dict):
             merged_parameters["AGENT_USER_PREFERENCE_PROFILE_JSON"] = json.dumps(preference_profile, ensure_ascii=False)
+        if query_intents.get("category_keywords"):
+            merged_parameters["AGENT_QUERY_INTENT_JSON"] = json.dumps(query_intents, ensure_ascii=False)
+            merged_parameters["AGENT_CATEGORY_KEYWORDS"] = json.dumps(query_intents.get("category_keywords"), ensure_ascii=False)
+            merged_parameters["AGENT_STRICT_CATEGORY"] = "true" if query_intents.get("strict_category") else "false"
         if excluded_names:
             merged_parameters["AGENT_EXCLUDED_STORE_NAMES"] = json.dumps(excluded_names, ensure_ascii=False)
         if nearby_context:
@@ -158,7 +167,7 @@ def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendRe
             merged_parameters["AGENT_USER_LOCATION_JSON"] = json.dumps(nearby_context, ensure_ascii=False)
 
         result = ask_workflow(
-            query=req.query,
+            query=effective_query,
             uid=resolved_uid,
             chat_id=req.chatId,
             stream=req.stream,
@@ -168,7 +177,7 @@ def recommend_via_workflow(req: WorkflowRecommendRequest) -> WorkflowRecommendRe
         return WorkflowRecommendResponse(**result)
 
     result = ask_spark_local_recommend(
-        query=req.query,
+        query=effective_query,
         uid=resolved_uid,
         user_profile=profile if profile.get("hasProfile") else None,
         preference_profile=preference_profile if isinstance(preference_profile, dict) else None,
