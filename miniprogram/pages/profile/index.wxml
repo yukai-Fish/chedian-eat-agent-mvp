@@ -1,68 +1,129 @@
 <view class="page">
-  <view class="hero glass-card">
-    <view class="hero-deco"></view>
-    <view class="hero-head">
-      <view>
-        <text class="title">我的</text>
+  <view class="section-card profile-card" bindtap="onTapProfileCard">
+    <image class="profile-emblem-watermark" src="../../assets/tabbar/xiaohui.png" mode="aspectFit" />
+
+    <view class="profile-avatar-wrap">
+      <image wx:if="{{profileAvatarUrl}}" class="profile-avatar" src="{{profileAvatarUrl}}" mode="aspectFill" />
+      <view wx:else class="profile-avatar profile-avatar-fallback">
+        <text class="profile-avatar-text">{{profileAvatarText}}</text>
       </view>
-      <button
-        class="{{isAuthenticated ? 'ghost-btn' : 'gold-btn'}} login-btn"
-        loading="{{loginLoading}}"
-        disabled="{{isAuthenticated}}"
-        bindtap="onWechatLogin"
-      >
-        {{isAuthenticated ? '微信已登录' : '微信登录'}}
-      </button>
     </view>
-    <view class="identity-panel">
-      <text class="identity-label">{{identityLabel}}</text>
-      <text class="identity-sub">匿名标识：{{anonymousIdShort || "未生成"}}</text>
+    <view class="profile-main">
+      <view class="profile-emblem-chip">
+        <image class="profile-emblem-chip-icon" src="../../assets/tabbar/xiaohui.png" mode="aspectFit" />
+        <text class="profile-emblem-chip-text">电子科大</text>
+      </view>
+      <text class="profile-name">{{profileDisplayName}}</text>
+      <text class="profile-desc">{{profileSubtitle}}</text>
+    </view>
+    <view class="profile-side">
+      <text class="profile-action">{{loginLoading ? '登录中...' : profileActionText}}</text>
+      <text class="profile-arrow">></text>
     </view>
   </view>
 
-  <view class="stats">
-    <view class="stat-item glass-card">
-      <text class="stat-value">{{favoritesCount}}</text>
-      <text class="stat-label">我的收藏</text>
-      <text class="stat-tip">常用店铺会持续沉淀到个人偏好</text>
-    </view>
-    <view class="stat-item glass-card">
-      <text class="stat-value">{{queryHistoryCount}}</text>
-      <text class="stat-label">最近查询</text>
-      <text class="stat-tip">保留近期需求，方便一键复用</text>
-    </view>
-    <view class="stat-item glass-card">
-      <text class="stat-value">{{locationEnabled ? "已开" : "未开"}}</text>
-      <text class="stat-label">定位权限</text>
-      <text class="stat-tip">{{locationEnabled ? "附近优先可按实时位置推荐" : "建议开启定位，获取更近店铺"}}</text>
+  <view class="overview-grid overview-grid-single">
+    <view class="overview-item section-card">
+      <text class="overview-value">{{locationEnabled ? '已开' : '未开'}}</text>
+      <text class="overview-label">定位权限</text>
     </view>
   </view>
 
-  <view class="actions glass-card">
-    <text class="section-title">常用操作</text>
-
-    <view class="action-item" bindtap="onOpenLocationSetting">
-      <view class="action-main-wrap">
-        <text class="action-main">定位权限设置</text>
-        <text class="action-sub">{{locationEnabled ? "已授权定位，可继续优化附近推荐准确度" : "去系统设置开启定位权限，提升附近优先效果"}}</text>
+  <view class="section-card list-card">
+    <view class="list-head">
+      <text class="section-title">我的收藏</text>
+      <text class="list-count">{{favoritesCount}} 条</text>
+    </view>
+    <view wx:if="{{favorites.length === 0}}" class="list-empty">暂无收藏，去问询页收藏喜欢的店铺吧</view>
+    <block wx:for="{{favorites}}" wx:key="*this">
+      <view class="list-item">
+        <text class="list-name">{{item}}</text>
+        <view class="list-actions">
+          <text class="list-action" bindtap="onOpenFavoriteDetail" data-name="{{item}}">查看</text>
+          <text class="list-action" bindtap="onRerunFavoriteItem" data-name="{{item}}">再次查询</text>
+          <text class="list-action list-action-danger" bindtap="onDeleteFavoriteItem" data-name="{{item}}">删除</text>
+        </view>
       </view>
-      <text class="action-arrow">></text>
+    </block>
+  </view>
+
+  <view class="section-card list-card">
+    <view class="list-head">
+      <text class="section-title">最近查询</text>
+      <text class="list-count">{{queryHistoryCount}} 条</text>
+    </view>
+    <view wx:if="{{queryHistory.length === 0}}" class="list-empty">暂无查询记录，去问询页输入需求试试</view>
+    <block wx:for="{{queryHistory}}" wx:key="*this">
+      <view class="list-item">
+        <text class="list-name">{{item}}</text>
+        <view class="list-actions">
+          <text class="list-action" bindtap="onViewHistoryItem" data-query="{{item}}">查看</text>
+          <text class="list-action" bindtap="onRerunHistoryItem" data-query="{{item}}">再次查询</text>
+          <text class="list-action list-action-danger" bindtap="onDeleteHistoryItem" data-query="{{item}}">删除</text>
+        </view>
+      </view>
+    </block>
+  </view>
+
+  <view class="section-card feature-card">
+    <text class="section-title">常用功能</text>
+
+    <view class="feature-item" bindtap="onOpenLocationSetting">
+      <text class="feature-main">定位权限设置</text>
+      <text class="feature-tail">{{locationEnabled ? '已开启' : '去设置'}}</text>
     </view>
 
-    <view class="action-item" bindtap="onGoAds">
-      <view class="action-main-wrap">
-        <text class="action-main">查看商家推荐页</text>
-        <text class="action-sub">浏览商家精选内容与活动展示位</text>
-      </view>
-      <text class="action-arrow">></text>
+    <view class="feature-item" bindtap="onGoAds">
+      <text class="feature-main">查看商家推荐页</text>
+      <text class="feature-tail">进入</text>
     </view>
 
-    <view class="action-item action-primary" bindtap="onGoInquiry">
-      <view class="action-main-wrap">
-        <text class="action-main action-main-primary">返回问询页</text>
-        <text class="action-sub action-sub-primary">继续输入需求，获取新的推荐结果</text>
+    <view class="feature-item" bindtap="onOpenTasteSetting">
+      <text class="feature-main">口味偏好设置</text>
+      <text class="feature-tail">编辑</text>
+    </view>
+
+    <view wx:if="{{tastePreferences.length > 0}}" class="taste-tags">
+      <text wx:for="{{tastePreferences}}" wx:key="*this" class="mini-tag">{{item}}</text>
+    </view>
+  </view>
+
+  <view class="section-card strategy-card">
+    <text class="section-title">当前推荐策略</text>
+    <view class="strategy-tags">
+      <text wx:for="{{strategyItems}}" wx:key="key" class="strategy-tag {{item.active ? 'strategy-tag-on' : 'strategy-tag-off'}}">{{item.label}}</text>
+    </view>
+
+    <text class="section-title section-title-sub">最近常用条件</text>
+    <view class="quick-tags">
+      <text wx:for="{{quickConditions}}" wx:key="*this" class="quick-tag" data-label="{{item}}" bindtap="onUseQuickCondition">{{item}}</text>
+    </view>
+  </view>
+
+  <view wx:if="{{tastePanelVisible}}" class="modal-mask" bindtap="onCloseTasteSetting">
+    <view class="taste-panel" catchtap="stopTap">
+      <view class="taste-panel-head">
+        <text class="taste-panel-title">口味偏好设置</text>
+        <text class="taste-panel-sub">最多选择 {{maxTasteCount}} 项</text>
       </view>
-      <text class="action-arrow action-arrow-primary">></text>
+
+      <view class="taste-option-grid">
+        <view
+          wx:for="{{tasteOptionViews}}"
+          wx:key="label"
+          class="taste-option {{item.selected ? 'taste-option-active' : ''}}"
+          data-tag="{{item.label}}"
+          bindtap="onToggleTasteTag"
+        >
+          <text class="taste-option-text">{{item.label}}</text>
+        </view>
+      </view>
+
+      <view class="taste-panel-actions">
+        <button class="panel-btn panel-btn-light" bindtap="onClearTasteDraft">清空</button>
+        <button class="panel-btn panel-btn-light" bindtap="onCloseTasteSetting">取消</button>
+        <button class="panel-btn panel-btn-primary" bindtap="onConfirmTasteSetting">保存偏好</button>
+      </view>
     </view>
   </view>
 </view>

@@ -10,6 +10,7 @@ const {
   API_BASE_URL,
 } = require("../../utils/api");
 const { getCurrentIdentity } = require("../../utils/identity");
+const { trackEvent } = require("../../utils/analytics");
 const { parseRecommendationAnswer } = require("../../utils/recommendation");
 
 const QUICK_PROMPTS = [
@@ -212,6 +213,7 @@ Page({
     locationError: "",
     locationLabel: "未定位",
     locationContext: null,
+    showRankings: false,
     rankingsLoading: false,
     rankingsReady: false,
     rankingsError: "",
@@ -306,7 +308,7 @@ Page({
       query: QUICK_PROMPTS[0],
     });
     this.loadUserData();
-    this.loadTodayRankings();
+    this.consumeAndRunExternalQuery();
   },
 
   onShow() {
@@ -315,6 +317,36 @@ Page({
       this.identity = latest;
     }
     this.loadUserData();
+    this.consumeAndRunExternalQuery();
+  },
+
+  buildQueryFromExternalIntent() {
+    const pendingRaw = wx.getStorageSync("chedian.minip.pendingQuery");
+    const previewRaw = wx.getStorageSync("chedian.minip.pendingQueryPreview");
+    const quickRaw = wx.getStorageSync("chedian.minip.quickCondition");
+    const pendingQuery = String(pendingRaw || "").trim();
+    const previewQuery = String(previewRaw || "").trim();
+    const quickCondition = String(quickRaw || "").trim();
+    if (!pendingQuery && !previewQuery && !quickCondition) return null;
+
+    wx.removeStorageSync("chedian.minip.pendingQuery");
+    wx.removeStorageSync("chedian.minip.pendingQueryPreview");
+    wx.removeStorageSync("chedian.minip.quickCondition");
+
+    const base = pendingQuery || previewQuery || String(this.data.query || "").trim() || QUICK_PROMPTS[0];
+    const query = quickCondition ? `${base}。${quickCondition}` : base;
+    return {
+      query,
+      shouldRun: !!pendingQuery || !!quickCondition,
+    };
+  },
+
+  async consumeAndRunExternalQuery() {
+    const intent = this.buildQueryFromExternalIntent();
+    if (!intent || !intent.query) return;
+    this.setData({ query: intent.query });
+    if (!intent.shouldRun) return;
+    await this.runRecommendation(intent.query, { resetDisliked: true });
   },
 
   formatLocationLabel(locationContext) {
@@ -485,6 +517,14 @@ Page({
     }
   },
 
+  onToggleRankings() {
+    const next = !this.data.showRankings;
+    this.setData({ showRankings: next });
+    if (next && !this.data.rankingsReady && !this.data.rankingsLoading) {
+      this.loadTodayRankings();
+    }
+  },
+
   onRetryRankings() {
     this.loadTodayRankings();
   },
@@ -620,6 +660,21 @@ Page({
   onOpenStoreDetail(e) {
     const storeName = (e.currentTarget.dataset.name || "").trim();
     if (!storeName) return;
+    const rank = Number(e.currentTarget.dataset.rank);
+    const score = Number(e.currentTarget.dataset.score);
+    trackEvent({
+      eventType: "recommendation_conversion",
+      source: "miniprogram_inquiry_recommend_card",
+      queryText: this.data.query || "",
+      shopId: storeName,
+      shopName: storeName,
+      meta: {
+        rank: Number.isFinite(rank) ? rank : null,
+        score: Number.isFinite(score) ? score : null,
+        onlyOpenNow: !!this.data.onlyOpenNow,
+        preferNearby: !!this.data.preferNearby,
+      },
+    });
     wx.navigateTo({
       url: `/pages/store-detail/index?name=${encodeURIComponent(storeName)}`,
     });

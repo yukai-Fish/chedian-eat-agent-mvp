@@ -1,0 +1,74 @@
+<view class="page">
+  <view wx:if="{{!isAuthenticated}}" class="notice-card">
+    <text class="notice-text">当前未登录，建议先返回“我的”页完成微信登录。</text>
+  </view>
+
+  <view class="section-card">
+    <view class="avatar-row">
+      <view class="avatar-wrap">
+        <image wx:if="{{avatarUrl}}" class="avatar" src="{{avatarUrl}}" mode="aspectFill" />
+        <view wx:else class="avatar avatar-fallback">
+          <text class="avatar-fallback-text">{{avatarText}}</text>
+        </view>
+      </view>
+      <view class="avatar-main">
+        <text class="block-title">微信头像与昵称</text>
+        <text class="block-sub">{{nickname || "未同步微信资料"}}</text>
+        <text wx:if="{{syncedWechatAtText}}" class="block-subtime">上次同步：{{syncedWechatAtText}}</text>
+      </view>
+      <button class="light-btn" loading="{{syncingWechat}}" bindtap="onSyncWechatProfile">同步微信资料</button>
+    </view>
+
+    <view class="form-row">
+      <text class="form-label">校区</text>
+      <picker mode="selector" range="{{campusOptions}}" value="{{campusIndex}}" bindchange="onChangeCampus">
+        <view class="picker-value">
+          <text>{{campusOptions[campusIndex]}}</text>
+          <text class="picker-arrow">></text>
+        </view>
+      </picker>
+    </view>
+  </view>
+
+  <view class="section-card">
+    <view class="title-row">
+      <text class="section-title">口味偏好</text>
+      <text class="section-sub">最多 {{maxTasteCount}} 项</text>
+    </view>
+    <view class="taste-grid">
+      <view
+        wx:for="{{tasteOptionViews}}"
+        wx:key="label"
+        class="taste-tag {{item.selected ? 'taste-tag-active' : ''}}"
+        data-tag="{{item.label}}"
+        bindtap="onToggleTaste"
+      >
+        <text>{{item.label}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="section-card">
+    <text class="section-title">忌口 / 不喜欢</text>
+    <textarea
+      class="dislike-input"
+      value="{{dislikesInput}}"
+      maxlength="120"
+      auto-height
+      placeholder="例如：香菜、肥肉、太油（可用逗号分隔）"
+      bindinput="onDislikesInput"
+    />
+  </view>
+
+  <view class="section-card">
+    <text class="section-title">预算偏好</text>
+    <picker mode="selector" range="{{budgetOptions}}" value="{{budgetIndex}}" bindchange="onChangeBudget">
+      <view class="picker-value">
+        <text>{{budgetOptions[budgetIndex]}}</text>
+        <text class="picker-arrow">></text>
+      </view>
+    </picker>
+  </view>
+
+  <button class="save-btn" loading="{{saving}}" bindtap="onSaveProfile">保存资料</button>
+</view>

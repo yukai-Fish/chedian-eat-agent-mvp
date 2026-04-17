@@ -1,22 +1,56 @@
 const { API_BASE_URL } = require("./config");
+const { clearAuthenticatedIdentity, getAuthToken } = require("./identity");
+
+function normalizeErrorMessage(statusCode, body) {
+  const prefix = `HTTP ${statusCode}`;
+  if (body && typeof body === "object") {
+    const detail = body.detail;
+    if (typeof detail === "string" && detail.trim()) {
+      return `${prefix} ${detail.trim()}`;
+    }
+    if (detail && typeof detail === "object") {
+      try {
+        const text = JSON.stringify(detail);
+        if (text && text !== "{}") return `${prefix} ${text}`;
+      } catch (_err) {
+        // ignore
+      }
+    }
+    const error = body.error;
+    if (typeof error === "string" && error.trim()) {
+      return `${prefix} ${error.trim()}`;
+    }
+  }
+  return prefix;
+}
+
 
 function request({ url, method = "GET", data = undefined, timeout = 90000 }) {
   return new Promise((resolve, reject) => {
+    const token = getAuthToken();
+    const header = {
+      "content-type": "application/json; charset=utf-8",
+      Accept: "application/json; charset=utf-8",
+    };
+    if (token) {
+      header.Authorization = `Bearer ${token}`;
+    }
+
     wx.request({
       url: `${API_BASE_URL}${url}`,
       method,
       data,
       timeout,
-      header: {
-        "content-type": "application/json; charset=utf-8",
-        Accept: "application/json; charset=utf-8",
-      },
+      header,
       success(res) {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           resolve(res.data || {});
           return;
         }
-        reject(new Error(`HTTP ${res.statusCode}`));
+        if (res.statusCode === 401 && token) {
+          clearAuthenticatedIdentity();
+        }
+        reject(new Error(normalizeErrorMessage(res.statusCode, res.data)));
       },
       fail(err) {
         reject(new Error(err.errMsg || "请求失败"));
@@ -107,6 +141,22 @@ function logAdClick(payload) {
   });
 }
 
+function trackUsageEvent(payload) {
+  return request({
+    url: "/api/events/track",
+    method: "POST",
+    data: payload,
+  }).catch((err) => {
+    const msg = err && err.message ? String(err.message) : "";
+    if (!msg.includes("HTTP 404")) throw err;
+    return request({
+      url: "/api/v1/events/track",
+      method: "POST",
+      data: payload,
+    });
+  });
+}
+
 function wechatLogin(payload) {
   return request({
     url: "/api/auth/wechat-login",
@@ -128,6 +178,37 @@ function syncProfileLocal(payload) {
     url: "/api/profile/sync-local",
     method: "POST",
     data: payload,
+  });
+}
+
+function fetchProfileSettings(userId) {
+  const uid = encodeURIComponent(String(userId || "").trim());
+  return request({
+    url: `/api/profile/settings?user_id=${uid}`,
+    method: "GET",
+  }).catch((err) => {
+    const msg = err && err.message ? String(err.message) : "";
+    if (!msg.includes("HTTP 404")) throw err;
+    return request({
+      url: `/api/v1/profile/settings?user_id=${uid}`,
+      method: "GET",
+    });
+  });
+}
+
+function saveProfileSettings(payload) {
+  return request({
+    url: "/api/profile/settings",
+    method: "POST",
+    data: payload,
+  }).catch((err) => {
+    const msg = err && err.message ? String(err.message) : "";
+    if (!msg.includes("HTTP 404")) throw err;
+    return request({
+      url: "/api/v1/profile/settings",
+      method: "POST",
+      data: payload,
+    });
   });
 }
 
@@ -155,9 +236,12 @@ module.exports = {
   logRankingClick,
   fetchAdSlots,
   logAdClick,
+  trackUsageEvent,
   wechatLogin,
   fetchProfileData,
   syncProfileLocal,
+  fetchProfileSettings,
+  saveProfileSettings,
   addFavorite,
   removeFavorite,
   API_BASE_URL,

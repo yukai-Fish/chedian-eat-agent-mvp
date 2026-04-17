@@ -1,0 +1,9 @@
+{
+  "total": 483,
+  "poi_matched": 118,
+  "geocoder_success": 299,
+  "geocoder_failed": 66,
+  "place_search_success": 66,
+  "place_search_failed": 0,
+  "daily_limit_hit": false
+}

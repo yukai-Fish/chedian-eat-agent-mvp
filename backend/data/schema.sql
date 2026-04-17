@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS recommendation_logs (
 
 CREATE TABLE IF NOT EXISTS usage_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  event_type TEXT NOT NULL, -- query | ranking_click
+  event_type TEXT NOT NULL, -- query | ranking_click | profile_card_click | profile_save | preference_change | recommendation_conversion
   uid TEXT,
   anonymous_id TEXT,
   user_id TEXT,
@@ -91,6 +91,21 @@ CREATE TABLE IF NOT EXISTS user_favorites (
 
 CREATE INDEX IF NOT EXISTS idx_favorites_user_time
   ON user_favorites(user_id, created_at);
+
+CREATE TABLE IF NOT EXISTS user_preference_profiles (
+  user_id TEXT PRIMARY KEY,
+  anonymous_id TEXT,
+  campus TEXT,
+  taste_tags_json TEXT,
+  dislikes_json TEXT,
+  budget_preference TEXT,
+  source TEXT DEFAULT 'miniprogram_profile',
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_preference_updated
+  ON user_preference_profiles(updated_at);
 
 CREATE TABLE IF NOT EXISTS ad_slots (
   id TEXT PRIMARY KEY,

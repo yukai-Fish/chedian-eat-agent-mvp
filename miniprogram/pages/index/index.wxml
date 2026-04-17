@@ -1,5 +1,11 @@
 <view class="page">
-  <view class="ranking glass-card">
+  <view class="ranking-toggle-wrap">
+    <button class="ghost-btn ranking-toggle-btn" bindtap="onToggleRankings">
+      {{showRankings ? "收起今日热门榜" : "查看今日热门榜"}}
+    </button>
+  </view>
+
+  <view wx:if="{{showRankings}}" class="ranking glass-card">
     <view class="ranking-head">
       <text class="ranking-title">今日热门榜</text>
       <text class="ranking-meta" wx:if="{{rankingsUpdatedAt}}">更新：{{rankingsUpdatedAt}}</text>
@@ -110,7 +116,13 @@
     </view>
 
     <block wx:for="{{visibleCards}}" wx:key="name">
-      <view class="card card-tap" bindtap="onOpenStoreDetail" data-name="{{item.name}}">
+      <view
+        class="card card-tap"
+        bindtap="onOpenStoreDetail"
+        data-name="{{item.name}}"
+        data-rank="{{index + 1}}"
+        data-score="{{item.score}}"
+      >
         <view class="card-head">
           <text class="card-name">{{item.name}}</text>
           <text wx:if="{{item.scoreLabel}}" class="score">{{item.scoreLabel}}</text>

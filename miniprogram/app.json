@@ -3,6 +3,7 @@
     "pages/index/index",
     "pages/ads/index",
     "pages/profile/index",
+    "pages/profile-detail/index",
     "pages/store-detail/index"
   ],
   "window": {
@@ -18,7 +19,7 @@
     }
   },
   "tabBar": {
-    "color": "#6b7890",
+    "color": "#8c96a8",
     "selectedColor": "#7b5b2a",
     "backgroundColor": "#f8f4ea",
     "borderStyle": "black",
@@ -26,20 +27,20 @@
       {
         "pagePath": "pages/index/index",
         "text": "问询",
-        "iconPath": "assets/tabbar/ginkgo-gold.png",
-        "selectedIconPath": "assets/tabbar/ginkgo-gold.png"
+        "iconPath": "assets/tabbar-v2/inquiry.png",
+        "selectedIconPath": "assets/tabbar-v2/inquiry-active.png"
       },
       {
         "pagePath": "pages/ads/index",
         "text": "商家推荐",
-        "iconPath": "assets/tabbar/xiaohui.png",
-        "selectedIconPath": "assets/tabbar/xiaohui.png"
+        "iconPath": "assets/tabbar-v2/ads.png",
+        "selectedIconPath": "assets/tabbar-v2/ads-active.png"
       },
       {
         "pagePath": "pages/profile/index",
         "text": "我的",
-        "iconPath": "assets/tabbar/xiaohui.png",
-        "selectedIconPath": "assets/tabbar/xiaohui.png"
+        "iconPath": "assets/tabbar-v2/profile.png",
+        "selectedIconPath": "assets/tabbar-v2/profile-active.png"
       }
     ]
   },

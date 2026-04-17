@@ -1,0 +1,20 @@
+
+> chedian-eat-agent-frontend@0.1.0 dev
+> next dev -p 3000 -p 3001
+
+   ▲ Next.js 15.5.12
+   - Local:        http://localhost:3001
+   - Network:      http://198.18.0.1:3001
+   - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 2.6s
+ ○ Compiling / ...
+ ✓ Compiled / in 813ms (581 modules)
+ GET / 200 in 1149ms
+ GET / 200 in 73ms
+ GET / 200 in 117ms
+ ○ Compiling /api/auth/[...nextauth] ...
+ ✓ Compiled /api/auth/[...nextauth] in 768ms (773 modules)
+ GET /api/auth/session 200 in 1716ms
+ GET /api/auth/session 200 in 39ms
