@@ -14,7 +14,17 @@ DB_PATH = Path(os.getenv("SQLITE_DB_PATH", str(BASE_DIR / "data" / "chedian.db")
 
 _CONTACT_KEY = "contact_wechat"
 _DEFAULT_CONTACT_WECHAT = "chedian_bd_01"
-_DEFAULT_IMAGE_BASE = "/assets/tabbar"
+_DEFAULT_IMAGE_BASE = "/assets/ads"
+_LEGACY_ICON_IMAGE_URLS = {
+    "/assets/tabbar/ginkgo-gold.png",
+    "/assets/tabbar/xiaohui.png",
+    "/assets/tabbar-v2/inquiry.png",
+    "/assets/tabbar-v2/inquiry-active.png",
+    "/assets/tabbar-v2/ads.png",
+    "/assets/tabbar-v2/ads-active.png",
+    "/assets/tabbar-v2/profile.png",
+    "/assets/tabbar-v2/profile-active.png",
+}
 _DEFAULT_AD_SLOTS = [
     {
         "id": "ad-campus",
@@ -23,7 +33,7 @@ _DEFAULT_AD_SLOTS = [
         "scene": "校内高频曝光",
         "audience": "适合：食堂窗口、校内品牌档口",
         "price_label": "¥199 / 周",
-        "image_url": f"{_DEFAULT_IMAGE_BASE}/ginkgo-gold.png",
+        "image_url": f"{_DEFAULT_IMAGE_BASE}/campus-canteen.jpg",
         "landing_type": "none",
         "landing_value": "",
         "rank": 10,
@@ -36,7 +46,7 @@ _DEFAULT_AD_SLOTS = [
         "scene": "夜间高转化流量",
         "audience": "适合：火锅、烧烤、小龙虾、夜宵门店",
         "price_label": "¥299 / 周",
-        "image_url": f"{_DEFAULT_IMAGE_BASE}/xiaohui.png",
+        "image_url": f"{_DEFAULT_IMAGE_BASE}/westgate-night.jpg",
         "landing_type": "none",
         "landing_value": "",
         "rank": 20,
@@ -49,13 +59,18 @@ _DEFAULT_AD_SLOTS = [
         "scene": "轻食健身偏好场景",
         "audience": "适合：轻食、咖啡、茶饮品牌",
         "price_label": "¥239 / 周",
-        "image_url": f"{_DEFAULT_IMAGE_BASE}/ginkgo-gold.png",
+        "image_url": f"{_DEFAULT_IMAGE_BASE}/lightfood-cafe.jpg",
         "landing_type": "none",
         "landing_value": "",
         "rank": 30,
         "is_active": 1,
     },
 ]
+_REALISTIC_SLOT_IMAGE_MAP = {
+    "ad-campus": f"{_DEFAULT_IMAGE_BASE}/campus-canteen.jpg",
+    "ad-west-gate": f"{_DEFAULT_IMAGE_BASE}/westgate-night.jpg",
+    "ad-light-food": f"{_DEFAULT_IMAGE_BASE}/lightfood-cafe.jpg",
+}
 
 
 def _connect() -> sqlite3.Connection:
@@ -182,10 +197,41 @@ def _ensure_ads_seed(conn: sqlite3.Connection) -> None:
     )
 
 
+def _upgrade_legacy_slot_images(conn: sqlite3.Connection) -> int:
+    """
+    Backward-compatible migration:
+    - If ad slots still point to old tabbar icon assets, replace them with realistic ad photos.
+    - Do not overwrite custom images configured by operations.
+    """
+    updated = 0
+    now = _now_iso()
+    for slot_id, target_image in _REALISTIC_SLOT_IMAGE_MAP.items():
+        row = conn.execute(
+            "SELECT image_url FROM ad_slots WHERE id = ? LIMIT 1",
+            (slot_id,),
+        ).fetchone()
+        if not row:
+            continue
+        current = _normalize_text(row["image_url"], max_length=1000)
+        if current and current not in _LEGACY_ICON_IMAGE_URLS:
+            continue
+        conn.execute(
+            """
+            UPDATE ad_slots
+            SET image_url = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (target_image, now, slot_id),
+        )
+        updated += 1
+    return updated
+
+
 def _ensure_ready() -> None:
     ensure_database()
     with _connect() as conn:
         _ensure_ads_seed(conn)
+        _upgrade_legacy_slot_images(conn)
         conn.commit()
 
 
