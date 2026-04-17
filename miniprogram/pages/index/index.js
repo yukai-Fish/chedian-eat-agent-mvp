@@ -301,6 +301,23 @@ Page({
     this.syncVisibleCards({ cardOpenStatus: nextStatus });
   },
 
+  async isStoreClosedForFeedback(storeName) {
+    const name = String(storeName || "").trim();
+    if (!name) return false;
+
+    const statusMap = this.data.cardOpenStatus || {};
+    if (statusMap[name] === false) return true;
+
+    try {
+      const detail = await fetchStoreDetail(name);
+      if (!detail || !detail.found || !detail.store) return false;
+      const code = String(((detail.store.businessStatus || {}).code || "")).trim().toLowerCase();
+      return code === "closed";
+    } catch (_err) {
+      return false;
+    }
+  },
+
   onLoad() {
     const identity = getCurrentIdentity();
     this.identity = identity;
@@ -845,9 +862,16 @@ Page({
     wx.showToast({ title: "宸叉竻闄ゆ帓闄ら」", icon: "none" });
   },
 
-  openQuickDining(e) {
+  async openQuickDining(e) {
     const storeName = (e.currentTarget.dataset.name || "").trim();
     if (!storeName || this.data.loading) return;
+    if (await this.isStoreClosedForFeedback(storeName)) {
+      wx.showToast({
+        title: "\u8be5\u5e97\u5f53\u524d\u5df2\u5173\u95e8\uff0c\u6682\u4e0d\u652f\u6301\u53cd\u9988",
+        icon: "none",
+      });
+      return;
+    }
     this.setData({
       quickDiningOpen: true,
       quickDiningLoading: false,
@@ -886,6 +910,13 @@ Page({
     if (!storeName) return;
     if (!comment) {
       wx.showToast({ title: "请写一句用餐评价", icon: "none" });
+      return;
+    }
+    if (await this.isStoreClosedForFeedback(storeName)) {
+      wx.showToast({
+        title: "\u8be5\u5e97\u5f53\u524d\u5df2\u5173\u95e8\uff0c\u6682\u4e0d\u652f\u6301\u53cd\u9988",
+        icon: "none",
+      });
       return;
     }
 
@@ -979,6 +1010,13 @@ Page({
 
     if (isDining && !payload.comment) {
       wx.showToast({ title: "吃后反馈请填写评论", icon: "none" });
+      return;
+    }
+    if (isDining && await this.isStoreClosedForFeedback(storeName)) {
+      wx.showToast({
+        title: "\u8be5\u5e97\u5f53\u524d\u5df2\u5173\u95e8\uff0c\u6682\u4e0d\u652f\u6301\u53cd\u9988",
+        icon: "none",
+      });
       return;
     }
 

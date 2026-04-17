@@ -425,16 +425,23 @@ def store_detail_proxy(name: str = "") -> StoreDetailResponse:
 
 @proxy_router.post("/feedback", response_model=FeedbackResponse)
 def submit_feedback_proxy(req: FeedbackRequest) -> FeedbackResponse:
+    store_name = req.storeName.strip()
     if req.feedbackType == "dining_feedback":
         if req.rating is None:
             raise HTTPException(status_code=400, detail="rating is required for dining feedback.")
         if not (req.comment or "").strip():
             raise HTTPException(status_code=400, detail="comment is required for dining feedback.")
+        detail = fetch_store_detail_by_name(store_name)
+        if isinstance(detail, dict):
+            business = detail.get("businessStatus") if isinstance(detail.get("businessStatus"), dict) else {}
+            status_code = str(business.get("code") or "").strip().lower()
+            if status_code == "closed":
+                raise HTTPException(status_code=400, detail="store is currently closed, dining feedback is disabled.")
 
     feedback_id = save_feedback(
         {
             "feedback_type": req.feedbackType,
-            "store_name": req.storeName.strip(),
+            "store_name": store_name,
             "anonymous_id": (req.anonymousId or "").strip() or None,
             "user_id": (req.userId or "").strip() or None,
             "area": (req.area or "").strip() or None,
